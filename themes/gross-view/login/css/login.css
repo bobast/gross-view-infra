@@ -1,0 +1,286 @@
+/* Gross View Keycloak Theme - Login Styles */
+
+:root {
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-200: #bfdbfe;
+  --color-primary-300: #93c5fd;
+  --color-primary-400: #60a5fa;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  --color-primary-800: #1e40af;
+  --color-primary-900: #1e3a8a;
+
+  --color-white: #ffffff;
+  --color-gray-50: #f9fafb;
+  --color-gray-100: #f3f4f6;
+  --color-gray-200: #e5e7eb;
+  --color-gray-300: #d1d5db;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #4b5563;
+  --color-gray-700: #374151;
+  --color-gray-800: #1f2937;
+  --color-gray-900: #111827;
+
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+/* Body and Layout */
+body {
+  font-family: var(--font-sans);
+  background: linear-gradient(135deg, var(--color-primary-50) 0%, var(--color-gray-100) 100%);
+  min-height: 100vh;
+}
+
+#display-console {
+  display: none !important;
+}
+
+/* Header */
+#kc-header {
+  background: linear-gradient(135deg, var(--color-primary-700) 0%, var(--color-primary-600) 100%);
+  padding: 1rem 2rem;
+  box-shadow: var(--shadow-md);
+}
+
+#kc-header-wrapper {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-white);
+  letter-spacing: -0.025em;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Main Content */
+#kc-content-wrapper {
+  max-width: 480px;
+  margin: 3rem auto;
+  padding: 0 1rem;
+}
+
+/* Card */
+.card-pf {
+  background: var(--color-white);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--color-gray-200);
+  padding: 2rem;
+  margin-top: -2rem;
+}
+
+/* Form */
+#kc-form {
+  margin-top: 1.5rem;
+}
+
+#kc-form-login {
+  margin-top: 1rem;
+}
+
+/* Form Groups */
+.form-group {
+  margin-bottom: 1.25rem;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-gray-700);
+  margin-bottom: 0.5rem;
+}
+
+/* Input Fields */
+.form-control {
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.875rem;
+  font-family: var(--font-sans);
+  color: var(--color-gray-800);
+  background: var(--color-white);
+  border: 1px solid var(--color-gray-300);
+  border-radius: 8px;
+  transition: all 150ms ease;
+  box-sizing: border-box;
+}
+
+.form-control:focus {
+  outline: none;
+  border-color: var(--color-primary-500);
+  box-shadow: 0 0 0 3px var(--color-primary-100);
+}
+
+.form-control::placeholder {
+  color: var(--color-gray-400);
+}
+
+#username, #password {
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.875rem;
+  font-family: var(--font-sans);
+  color: var(--color-gray-800);
+  background: var(--color-white);
+  border: 1px solid var(--color-gray-300);
+  border-radius: 8px;
+  transition: all 150ms ease;
+  box-sizing: border-box;
+}
+
+#username:focus, #password:focus {
+  outline: none;
+  border-color: var(--color-primary-500);
+  box-shadow: 0 0 0 3px var(--color-primary-100);
+}
+
+/* Primary Button */
+#kc-login, .btn-primary {
+  width: 100%;
+  padding: 0.75rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: var(--color-white);
+  background: linear-gradient(135deg, var(--color-primary-600) 0%, var(--color-primary-500) 100%);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 150ms ease;
+  margin-top: 1.5rem;
+}
+
+#kc-login:hover, .btn-primary:hover {
+  background: linear-gradient(135deg, var(--color-primary-700) 0%, var(--color-primary-600) 100%);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+/* Social Login */
+.social {
+  width: 100%;
+  padding: 0.625rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  color: var(--color-gray-700);
+  background: var(--color-white);
+  border: 1px solid var(--color-gray-300);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 150ms ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.social:hover {
+  background: var(--color-gray-50);
+  border-color: var(--color-gray-400);
+}
+
+/* Links */
+#kc-forgot-password, #kc-registration {
+  margin-top: 1rem;
+  text-align: center;
+}
+
+#kc-forgot-password a, #kc-registration a {
+  color: var(--color-primary-600);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: color 150ms ease;
+}
+
+#kc-forgot-password a:hover, #kc-registration a:hover {
+  color: var(--color-primary-700);
+  text-decoration: underline;
+}
+
+/* Error Messages */
+.alert-error {
+  background: #fef2f2;
+  border: 1px solid var(--color-error);
+  color: var(--color-error);
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+/* Success Messages */
+.alert-success {
+  background: #ecfdf5;
+  border: 1px solid var(--color-success);
+  color: var(--color-success);
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+/* Warning Messages */
+.alert-warning {
+  background: #fffbeb;
+  border: 1px solid var(--color-warning);
+  color: #92400e;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+/* Checkbox */
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary-600);
+}
+
+.checkbox label {
+  font-size: 0.875rem;
+  color: var(--color-gray-600);
+  margin: 0;
+}
+
+/* Remember Me */
+#rememberme {
+  margin: 1rem 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  #kc-content-wrapper {
+    margin: 1rem auto;
+    padding: 0 0.75rem;
+  }
+
+  .card-pf {
+    padding: 1.5rem;
+  }
+
+  #kc-header {
+    padding: 0.75rem 1rem;
+  }
+}

@@ -1,1 +1,6 @@
-# gross-view-infra
+# gross-view-keycloak
+
+
+```
+docker-compose up -d
+```
