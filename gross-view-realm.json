@@ -1292,8 +1292,9 @@
       }
     } ]
   },
-  "internationalizationEnabled" : false,
-  "supportedLocales" : [ ],
+  "internationalizationEnabled" : true,
+  "defaultLocale" : "ru",
+  "supportedLocales" : [ "en", "ru" ],
   "authenticationFlows" : [ {
     "id" : "afb1a3e1-57ff-45c7-9fff-2cdbc35d8a9f",
     "alias" : "Account verification options",
