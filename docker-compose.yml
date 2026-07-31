@@ -29,6 +29,7 @@ services:
       KC_HOSTNAME_STRICT_BACKCHANNEL: false
       KC_HTTP_ENABLED: true
       KC_HOSTNAME_STRICT_HTTPS: false
+      KC_PROXY_HEADERS: xforwarded
       KC_HEALTH_ENABLED: true
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
@@ -54,6 +55,7 @@ services:
       - 443:443
     volumes:
       - ./nginx/gross-view.local.conf:/etc/nginx/conf.d/gross-view.local.conf
+      - ./certs:/etc/nginx/certs:ro
     depends_on:
       - keycloak
     networks:
