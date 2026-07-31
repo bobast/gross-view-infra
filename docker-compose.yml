@@ -47,6 +47,20 @@ services:
     networks:
       - keycloak_network
 
+  nginx:
+    image: nginx:stable-alpine
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - ./nginx/gross-view.local.conf:/etc/nginx/conf.d/gross-view.local.conf
+    depends_on:
+      - keycloak
+    networks:
+      - keycloak_network
+    extra_hosts:
+      - host.docker.internal:host-gateway
+
 volumes:
   postgres_data:
     driver: local

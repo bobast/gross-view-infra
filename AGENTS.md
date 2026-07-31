@@ -2,20 +2,24 @@
 
 ## Project Overview
 
-This is a **Keycloak configuration repository** for the "gross-view" project. It contains realm configuration and custom CSS styles for authentication forms.
+This repository manages **infrastructure configuration** for the "gross-view" project. It contains Keycloak realm settings, Nginx reverse proxy configuration, and custom CSS styles for authentication forms.
 
 ## Repository Structure
 
 - `gross-view-realm.json` — Keycloak realm configuration (exported/imported)
-- `index.css` — Custom CSS styles for authentication forms (login, registration, etc.)
+- `docker-compose.yml` — Docker Compose stack: PostgreSQL, Keycloak, Nginx
+- `nginx/gross-view.local.conf` — Nginx site config for `gross-view.local`
 - `README.md` — Project documentation
+- `themes/gross-view/` — Keycloak custom theme (login pages, messages, styles)
+- `index.css` — Custom CSS styles for authentication forms (login, registration, etc.)
 
 ## Purpose
 
-This repo manages Keycloak theme customizations and realm settings. CSS files in this repository are delivered for importing styles into Keycloak authentication forms (login page, registration, password reset, etc.).
+This repo manages reverse proxy routing, Keycloak theme customizations, realm settings, and multi-container orchestration. Nginx provides unified entry point routing `/sso` to Keycloak, `/api` to backend, and `/` to frontend.
 
 ## Important Notes
 
+- Nginx config changes affect routing for the entire `gross-view.local` site
 - CSS changes affect the visual appearance of Keycloak login/registration screens
 - Realm JSON should only be modified carefully — it defines clients, roles, mappers, and identity providers
 - Do not add application source code here — this is configuration-only
