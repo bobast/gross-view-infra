@@ -665,6 +665,34 @@
     "optionalClientScopes" : [ "address", "phone", "offline_access", "microprofile-jwt" ]
   } ],
   "clientScopes" : [ {
+    "id" : "f71c9c88-4046-4ffe-a330-40858e89c64d",
+    "name" : "openid",
+    "description" : "OpenID Connect scope for add user id to the access token",
+    "protocol" : "openid-connect",
+    "attributes" : {
+      "include.in.token.scope" : "true",
+      "display.on.consent.screen" : "true",
+      "consent.screen.text" : "${openidScopeConsentText}"
+    },
+    "protocolMappers" : [ {
+      "id" : "openid-protocol-mapper-sub",
+      "name" : "sub",
+      "protocol" : "openid-connect",
+      "protocolMapper" : "oidc-sub-mapper",
+      "consentRequired" : false,
+      "config" : {
+        "introspection.token.claim" : "true",
+        "access.token.claim" : "true"
+      }
+    }, {
+      "id" : "openid-protocol-mapper-aud-resolve",
+      "name" : "aud-resolve",
+      "protocol" : "openid-connect",
+      "protocolMapper" : "oidc-audience-resolve-mapper",
+      "consentRequired" : false,
+      "config" : { }
+    } ]
+  }, {
     "id" : "845d95d9-b2b0-4ee8-b31a-419e67be1636",
     "name" : "roles",
     "description" : "OpenID Connect scope for add user roles to the access token",
@@ -1155,7 +1183,7 @@
       }
     } ]
   } ],
-  "defaultDefaultClientScopes" : [ "role_list", "profile", "email", "roles", "web-origins", "acr" ],
+  "defaultDefaultClientScopes" : [ "openid", "role_list", "profile", "email", "roles", "web-origins", "acr" ],
   "defaultOptionalClientScopes" : [ "offline_access", "address", "phone", "microprofile-jwt" ],
   "browserSecurityHeaders" : {
     "contentSecurityPolicyReportOnly" : "",
@@ -1199,7 +1227,8 @@
       "subType" : "anonymous",
       "subComponents" : { },
       "config" : {
-        "allow-default-scopes" : [ "true" ]
+        "allow-default-scopes" : [ "true" ],
+        "allowed-client-scopes" : [ "openid" ]
       }
     }, {
       "id" : "de57346d-31a9-4f7f-8a91-778c89b9cecd",
@@ -1208,7 +1237,8 @@
       "subType" : "anonymous",
       "subComponents" : { },
       "config" : {
-        "host-sending-registration-request-must-match" : [ "true" ],
+        "trusted-hosts" : [ "127.0.0.1", "localhost" ],
+        "host-sending-registration-request-must-match" : [ "false" ],
         "client-uris-must-match" : [ "true" ]
       }
     }, {
@@ -1234,7 +1264,8 @@
       "subType" : "authenticated",
       "subComponents" : { },
       "config" : {
-        "allow-default-scopes" : [ "true" ]
+        "allow-default-scopes" : [ "true" ],
+        "allowed-client-scopes" : [ "openid" ]
       }
     }, {
       "id" : "30dc137a-c689-4a3f-95db-68849eef133a",
