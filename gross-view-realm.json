@@ -1237,7 +1237,7 @@
       "subType" : "anonymous",
       "subComponents" : { },
       "config" : {
-        "trusted-hosts" : [ "127.0.0.1", "localhost" ],
+        "trusted-hosts" : [ "127.0.0.1", "localhost", "opencode.ai" ],
         "host-sending-registration-request-must-match" : [ "false" ],
         "client-uris-must-match" : [ "true" ]
       }
