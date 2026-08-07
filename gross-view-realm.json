@@ -30,10 +30,10 @@
   "loginTheme" : "gross-view",
   "accountTheme" : "gross-view",
   "emailTheme" : "gross-view",
-  "registrationAllowed" : false,
-  "registrationEmailAsUsername" : false,
+  "registrationAllowed" : true,
+  "registrationEmailAsUsername" : true,
   "rememberMe" : false,
-  "verifyEmail" : false,
+  "verifyEmail" : true,
   "loginWithEmailAllowed" : true,
   "duplicateEmailsAllowed" : false,
   "resetPasswordAllowed" : false,
@@ -46,6 +46,7 @@
   "quickLoginCheckMilliSeconds" : 1000,
   "maxDeltaTimeSeconds" : 43200,
   "failureFactor" : 30,
+  "passwordPolicy" : "length(10) and upperCase(1) and lowerCase(1) and digits(1) and specialChars(1) and notUsername(undefined)",
   "roles" : {
     "realm" : [ {
       "id" : "93247d94-084d-4108-a96c-7f169209c9aa",
@@ -394,28 +395,7 @@
   "webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister" : false,
   "webAuthnPolicyPasswordlessAcceptableAaguids" : [ ],
   "webAuthnPolicyPasswordlessExtraOrigins" : [ ],
-  "users" : [ {
-    "id" : "b0f4a23e-5551-4b51-a881-390c8eb55876",
-    "createdTimestamp" : 1784216799495,
-    "username" : "aaa",
-    "enabled" : true,
-    "totp" : false,
-    "emailVerified" : true,
-    "email" : "pavlov@platforma.ltd",
-    "credentials" : [ {
-      "id" : "cb1330c5-65b8-480d-aa25-877385df65be",
-      "type" : "password",
-      "userLabel" : "My password",
-      "createdDate" : 1784216812563,
-      "secretData" : "{\"value\":\"YKDNQ2GfV5T5zaxle4NQM6hAHwsrO8NQKjr79+9b8Tk=\",\"salt\":\"qXmAVEmTyMEXzRffa6nR4Q==\",\"additionalParameters\":{}}",
-      "credentialData" : "{\"hashIterations\":27500,\"algorithm\":\"pbkdf2-sha256\",\"additionalParameters\":{}}"
-    } ],
-    "disableableCredentialTypes" : [ ],
-    "requiredActions" : [ ],
-    "realmRoles" : [ "DESIGNER", "default-roles-gross-view-realm", "OZON_IMPORT" ],
-    "notBefore" : 0,
-    "groups" : [ ]
-  } ],
+  "users" : [ ],
   "scopeMappings" : [ {
     "clientScope" : "offline_access",
     "roles" : [ "offline_access" ]

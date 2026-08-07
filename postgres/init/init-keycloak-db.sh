@@ -1,0 +1,7 @@
+#!/bin/bash
+set -e
+
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+    CREATE ROLE "${KC_DB_USER}" LOGIN PASSWORD '${KC_DB_PSWD}' CREATEDB;
+    CREATE DATABASE "${KC_DB_NAME}" OWNER "${KC_DB_USER}";
+EOSQL
