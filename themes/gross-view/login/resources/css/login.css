@@ -34,17 +34,36 @@
 
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+
+  /* Semantic tokens (overridden in the [data-theme='dark'] block below) */
+  --color-surface: #ffffff;
+  --color-surface-hover: #f9fafb;
+  --color-body-bg: #ffffff;
+  --color-on-accent: #ffffff;
+  --color-accent: #2563eb;
+
+  --color-error-bg: #fef2f2;
+  --color-error-border: #fecaca;
+  --color-error-text: #b91c1c;
+  --color-success-bg: #ecfdf5;
+  --color-success-border: #a7f3d0;
+  --color-success-text: #065f46;
+  --color-warning-bg: #fffbeb;
+  --color-warning-border: #fde68a;
+  --color-warning-text: #92400e;
+
+  color-scheme: light;
 }
 
 /* Body and Layout */
 html, body {
   font-family: var(--font-sans);
-  background: var(--color-white) !important;
+  background: var(--color-body-bg) !important;
   min-height: 100vh;
 }
 
 .login-pf {
-  background: var(--color-white) !important;
+  background: var(--color-body-bg) !important;
 }
 
 #display-console {
@@ -61,7 +80,7 @@ html, body {
 #kc-header-wrapper {
   font-size: 1.25rem;
   font-weight: 600;
-  color: var(--color-white);
+  color: var(--color-on-accent);
   letter-spacing: -0.025em;
   max-width: 1400px;
   margin: 0 auto;
@@ -80,7 +99,7 @@ html, body {
 
 /* Card */
 .card-pf {
-  background: var(--color-white);
+  background: var(--color-surface);
   padding: 2rem;
   border: none;
   box-shadow: none;
@@ -116,7 +135,7 @@ html, body {
   font-size: 0.875rem;
   font-family: var(--font-sans);
   color: var(--color-gray-800);
-  background: var(--color-white);
+  background: var(--color-surface);
   border: 1px solid var(--color-gray-300);
   border-radius: 8px;
   transition: all 150ms ease;
@@ -139,7 +158,7 @@ html, body {
   font-size: 0.875rem;
   font-family: var(--font-sans);
   color: var(--color-gray-800);
-  background: var(--color-white);
+  background: var(--color-surface);
   border: 1px solid var(--color-gray-300);
   border-radius: 8px;
   transition: all 150ms ease;
@@ -159,7 +178,7 @@ html, body {
   font-size: 0.875rem;
   font-weight: 600;
   font-family: var(--font-sans);
-  color: var(--color-white);
+  color: var(--color-on-accent);
   background: linear-gradient(135deg, var(--color-primary-600) 0%, var(--color-primary-500) 100%);
   border: none;
   border-radius: 8px;
@@ -182,7 +201,7 @@ html, body {
   font-weight: 500;
   font-family: var(--font-sans);
   color: var(--color-gray-700);
-  background: var(--color-white);
+  background: var(--color-surface);
   border: 1px solid var(--color-gray-300);
   border-radius: 8px;
   cursor: pointer;
@@ -195,7 +214,7 @@ html, body {
 }
 
 .social:hover {
-  background: var(--color-gray-50);
+  background: var(--color-surface-hover);
   border-color: var(--color-gray-400);
 }
 
@@ -206,7 +225,7 @@ html, body {
 }
 
 #kc-forgot-password a, #kc-registration a {
-  color: var(--color-primary-600);
+  color: var(--color-accent);
   font-size: 0.875rem;
   font-weight: 500;
   text-decoration: none;
@@ -214,15 +233,15 @@ html, body {
 }
 
 #kc-forgot-password a:hover, #kc-registration a:hover {
-  color: var(--color-primary-700);
+  color: var(--color-primary-800);
   text-decoration: underline;
 }
 
 /* Error Messages */
 .alert-error {
-  background: #fef2f2;
-  border: 1px solid var(--color-error);
-  color: var(--color-error);
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error-border);
+  color: var(--color-error-text);
   padding: 0.75rem 1rem;
   border-radius: 8px;
   font-size: 0.875rem;
@@ -231,9 +250,9 @@ html, body {
 
 /* Success Messages */
 .alert-success {
-  background: #ecfdf5;
-  border: 1px solid var(--color-success);
-  color: var(--color-success);
+  background: var(--color-success-bg);
+  border: 1px solid var(--color-success-border);
+  color: var(--color-success-text);
   padding: 0.75rem 1rem;
   border-radius: 8px;
   font-size: 0.875rem;
@@ -242,9 +261,9 @@ html, body {
 
 /* Warning Messages */
 .alert-warning {
-  background: #fffbeb;
-  border: 1px solid var(--color-warning);
-  color: #92400e;
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
+  color: var(--color-warning-text);
   padding: 0.75rem 1rem;
   border-radius: 8px;
   font-size: 0.875rem;
@@ -301,7 +320,7 @@ html, body {
   font-size: 0.8125rem;
   font-weight: 500;
   font-family: var(--font-sans);
-  color: var(--color-white);
+  color: var(--color-on-accent);
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 6px;
@@ -334,7 +353,7 @@ html, body {
   margin-top: 0.25rem;
   padding: 0.25rem 0;
   list-style: none;
-  background: var(--color-white);
+  background: var(--color-surface);
   border: 1px solid var(--color-gray-200);
   border-radius: 8px;
   box-shadow: var(--shadow-lg);
@@ -360,8 +379,106 @@ html, body {
 }
 
 .kc-locale-option a:hover {
-  background: var(--color-gray-50);
-  color: var(--color-primary-600);
+  background: var(--color-surface-hover);
+  color: var(--color-accent);
+}
+
+/* Dark theme – applied via <html data-theme="dark"> */
+[data-theme='dark'] {
+  --color-gray-50: #0f172a;
+  --color-gray-100: #1e293b;
+  --color-gray-200: #334155;
+  --color-gray-300: #475569;
+  --color-gray-400: #64748b;
+  --color-gray-500: #94a3b8;
+  --color-gray-600: #cbd5e1;
+  --color-gray-700: #e2e8f0;
+  --color-gray-800: #f1f5f9;
+  --color-gray-900: #f8fafc;
+
+  --color-primary-50: #172554;
+  --color-primary-100: #1e3a8a;
+  --color-primary-200: #1e40af;
+  --color-primary-800: #bfdbfe;
+  --color-primary-900: #dbeafe;
+
+  --color-body-bg: #0f172a;
+  --color-surface: #1e293b;
+  --color-surface-hover: #243248;
+  --color-on-accent: #ffffff;
+  --color-accent: #60a5fa;
+
+  --color-error-bg: #450a0a;
+  --color-error-border: #7f1d1d;
+  --color-error-text: #fca5a5;
+  --color-success-bg: #052e16;
+  --color-success-border: #14532d;
+  --color-success-text: #6ee7b7;
+  --color-warning-bg: #451a03;
+  --color-warning-border: #78350f;
+  --color-warning-text: #fcd34d;
+
+  color-scheme: dark;
+}
+
+/* Dark theme flat layout – the form card and its controls blend into the page
+   background (--color-body-bg), so borders and the password toggle do not
+   contrast with the rest of the screen. Focus rings keep the input affordance. */
+[data-theme='dark'] html,
+[data-theme='dark'] body {
+  color: var(--color-gray-800);
+}
+
+[data-theme='dark'] .card-pf {
+  background: var(--color-body-bg);
+}
+
+[data-theme='dark'] .form-group label {
+  color: var(--color-gray-800);
+}
+
+[data-theme='dark'] .checkbox label {
+  color: var(--color-gray-700);
+}
+
+[data-theme='dark'] .form-control,
+[data-theme='dark'] #username,
+[data-theme='dark'] #password,
+[data-theme='dark'] .pf-c-form-control {
+  background: var(--color-body-bg);
+  border-color: var(--color-body-bg);
+}
+
+[data-theme='dark'] #username:focus,
+[data-theme='dark'] #password:focus,
+[data-theme='dark'] .pf-c-form-control:focus {
+  border-color: var(--color-primary-500);
+}
+
+[data-theme='dark'] #username::placeholder,
+[data-theme='dark'] #password::placeholder,
+[data-theme='dark'] .form-control::placeholder,
+[data-theme='dark'] .pf-c-form-control::placeholder {
+  color: var(--color-gray-500);
+}
+
+[data-theme='dark'] .pf-c-button.pf-m-control {
+  background: var(--color-body-bg);
+  border-color: var(--color-body-bg);
+  color: var(--color-gray-500);
+}
+
+[data-theme='dark'] .pf-c-button.pf-m-control:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-body-bg);
+}
+
+[data-theme='dark'] .pf-c-form__helper-text:not(.pf-m-error) {
+  color: var(--color-gray-500);
+}
+
+[data-theme='dark'] #kc-registration span {
+  color: var(--color-gray-600);
 }
 
 @media (max-width: 768px) {

@@ -11,7 +11,8 @@ This repository manages **infrastructure configuration** for the "gross-view" pr
 - `nginx/gross-view.local.conf` — Nginx site config for `gross-view.local`
 - `README.md` — Project documentation
 - `themes/gross-view/` — Keycloak custom theme (login pages, messages, styles)
-- `index.css` — Custom CSS styles for authentication forms (login, registration, etc.)
+- `themes/gross-view/login/resources/css/login.css` — Custom CSS styles for authentication forms (login, registration, etc.)
+- `themes/gross-view/login/resources/js/theme.js` — Applies the site's theme (`data-theme`) to the login page by reading the shared `localStorage` key `gross-view:theme`
 
 ## Purpose
 
@@ -23,7 +24,9 @@ This repo manages reverse proxy routing, Keycloak theme customizations, realm se
 - CSS changes affect the visual appearance of Keycloak login/registration screens
 - Realm JSON should only be modified carefully — it defines clients, roles, mappers, and identity providers
 - Do not add application source code here — this is configuration-only
-- When editing `index.css`, ensure compatibility with Keycloak's FreeMarker templates (IDs/classes used in forms may vary by Keycloak version)
+- When editing `login.css`, ensure compatibility with Keycloak's FreeMarker templates (IDs/classes used in forms may vary by Keycloak version)
+- `login.css` supports light/dark via the `data-theme` attribute on `<html>`; keep the semantic tokens (`--color-surface`, `--color-body-bg`, `--color-on-accent`, `--color-accent`, status tokens) in `:root` and the `[data-theme='dark']` block in sync with `src/app/index.css` of gross-view-ui
+- The theme is applied to the login page by `js/theme.js` (declared via `scripts=` in `theme.properties`); its storage key must match `THEME_STORAGE_KEY` in `src/features/theme/model.ts` of gross-view-ui
 
 ## Available Skills
 
