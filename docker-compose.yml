@@ -29,9 +29,8 @@ services:
     image: quay.io/keycloak/keycloak:23.0.6
     command: start --import-realm
     environment:
-      KC_HOSTNAME: gross-view.local
-      KC_HOSTNAME_PATH: /sso
-      KC_HOSTNAME_PORT: 443
+      KC_HOSTNAME_URL: https://gross-view.local/sso
+      KC_HOSTNAME_ADMIN_URL: https://gross-view.local/sso
       KC_HOSTNAME_STRICT: true
       KC_HOSTNAME_STRICT_HTTPS: true
       KC_HOSTNAME_STRICT_BACKCHANNEL: false
