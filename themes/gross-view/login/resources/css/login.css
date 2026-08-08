@@ -206,8 +206,9 @@ html, body {
   margin-bottom: clamp(0.25rem, 1.25vh, 0.5rem);
 }
 
-/* Input Fields */
-.form-control {
+/* Input Fields – .pf-c-form-control covers the registration fields too */
+.form-control,
+.pf-c-form-control {
   width: 100%;
   padding: clamp(0.5rem, 1.5vh, 0.625rem) 0.875rem;
   font-size: 0.875rem;
@@ -220,13 +221,15 @@ html, body {
   box-sizing: border-box;
 }
 
-.form-control:focus {
+.form-control:focus,
+.pf-c-form-control:focus {
   outline: none;
   border-color: var(--color-primary-500);
   box-shadow: 0 0 0 3px var(--color-primary-100);
 }
 
-.form-control::placeholder {
+.form-control::placeholder,
+.pf-c-form-control::placeholder {
   color: var(--color-gray-400);
 }
 
@@ -294,6 +297,20 @@ html, body {
 .social:hover {
   background: var(--color-surface-hover);
   border-color: var(--color-gray-400);
+}
+
+/* Password visibility toggle – matches the secondary buttons' border color */
+.pf-c-button.pf-m-control {
+  background: var(--color-surface);
+  color: var(--color-gray-500);
+}
+
+.pf-c-button.pf-m-control:after {
+  border-color: var(--color-gray-300);
+}
+
+.pf-c-button.pf-m-control:hover {
+  background: var(--color-surface-hover);
 }
 
 /* Links */
@@ -509,9 +526,9 @@ html, body {
   color-scheme: dark;
 }
 
-/* Dark theme flat layout – the form card and its controls blend into the page
-   background (--color-body-bg), so borders and the password toggle do not
-   contrast with the rest of the screen. Focus rings keep the input affordance. */
+/* Dark theme – the form card sits flat on --color-body-bg, while input fields
+   and the password toggle sit on an elevated surface (--color-surface) with a
+   visible border (--color-gray-300), matching the site's form controls. */
 [data-theme='dark'] html,
 [data-theme='dark'] body {
   color: var(--color-gray-800);
@@ -533,8 +550,15 @@ html, body {
 [data-theme='dark'] #username,
 [data-theme='dark'] #password,
 [data-theme='dark'] .pf-c-form-control {
-  background: var(--color-body-bg);
-  border-color: var(--color-body-bg);
+  background: var(--color-surface);
+  border-color: var(--color-gray-300);
+}
+
+/* The password field is wrapped in .pf-c-input-group, which PatternFly paints
+   white by default – that is what leaked white corners around the field in the
+   dark theme. Match it to the input surface. */
+[data-theme='dark'] .pf-c-input-group {
+  background: var(--color-surface);
 }
 
 [data-theme='dark'] #username:focus,
@@ -551,14 +575,17 @@ html, body {
 }
 
 [data-theme='dark'] .pf-c-button.pf-m-control {
-  background: var(--color-body-bg);
-  border-color: var(--color-body-bg);
+  background: var(--color-surface);
+  border-color: var(--color-gray-300);
   color: var(--color-gray-500);
+}
+
+[data-theme='dark'] .pf-c-button.pf-m-control:after {
+  border-color: var(--color-gray-300);
 }
 
 [data-theme='dark'] .pf-c-button.pf-m-control:hover {
   background: var(--color-surface-hover);
-  border-color: var(--color-body-bg);
 }
 
 [data-theme='dark'] .pf-c-form__helper-text:not(.pf-m-error) {
