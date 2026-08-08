@@ -59,11 +59,24 @@
 html, body {
   font-family: var(--font-sans);
   background: var(--color-body-bg) !important;
-  min-height: 100vh;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
 .login-pf {
   background: var(--color-body-bg) !important;
+}
+
+/* Root container: toolbar pinned to the top, the card fills the remaining
+   viewport height so the page never scrolls. */
+.login-pf-page {
+  height: 100%;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 #display-console {
@@ -76,10 +89,11 @@ html, body {
   padding: 1rem 2rem;
   box-shadow: var(--shadow-md);
   border: none;
-  margin-bottom: 0;
+  margin: 0;
   position: sticky;
   top: 0;
   z-index: 100;
+  flex-shrink: 0;
 }
 
 /* Constrains the toolbar content to the same width as the site's header__inner */
@@ -136,16 +150,35 @@ html, body {
   background: transparent !important;
 }
 
+#kc-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  float: none;
+}
+
 #kc-content-wrapper {
+  width: 100%;
   max-width: 480px;
-  margin: 3rem auto;
+  margin: auto;
   padding: 0 1rem;
+  box-sizing: border-box;
 }
 
 /* Card */
 .card-pf {
   background: var(--color-surface);
-  padding: 2rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(1rem, 3vh, 2rem) clamp(1rem, 4vw, 2rem);
   border: none;
   box-shadow: none;
   border-radius: 0;
@@ -153,16 +186,16 @@ html, body {
 
 /* Form */
 #kc-form {
-  margin-top: 1.5rem;
+  margin-top: clamp(0.75rem, 3vh, 1.5rem);
 }
 
 #kc-form-login {
-  margin-top: 1rem;
+  margin-top: clamp(0.5rem, 2vh, 1rem);
 }
 
 /* Form Groups */
 .form-group {
-  margin-bottom: 1.25rem;
+  margin-bottom: clamp(0.75rem, 2.5vh, 1.25rem);
 }
 
 .form-group label {
@@ -170,13 +203,13 @@ html, body {
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--color-gray-700);
-  margin-bottom: 0.5rem;
+  margin-bottom: clamp(0.25rem, 1.25vh, 0.5rem);
 }
 
 /* Input Fields */
 .form-control {
   width: 100%;
-  padding: 0.625rem 0.875rem;
+  padding: clamp(0.5rem, 1.5vh, 0.625rem) 0.875rem;
   font-size: 0.875rem;
   font-family: var(--font-sans);
   color: var(--color-gray-800);
@@ -199,7 +232,7 @@ html, body {
 
 #username, #password {
   width: 100%;
-  padding: 0.625rem 0.875rem;
+  padding: clamp(0.5rem, 1.5vh, 0.625rem) 0.875rem;
   font-size: 0.875rem;
   font-family: var(--font-sans);
   color: var(--color-gray-800);
@@ -219,7 +252,7 @@ html, body {
 /* Primary Button */
 #kc-login, .btn-primary {
   width: 100%;
-  padding: 0.75rem 1.25rem;
+  padding: clamp(0.5rem, 1.5vh, 0.75rem) 1.25rem;
   font-size: 0.875rem;
   font-weight: 600;
   font-family: var(--font-sans);
@@ -229,7 +262,7 @@ html, body {
   border-radius: 8px;
   cursor: pointer;
   transition: all 150ms ease;
-  margin-top: 1.5rem;
+  margin-top: clamp(0.75rem, 3vh, 1.5rem);
 }
 
 #kc-login:hover, .btn-primary:hover {
@@ -265,7 +298,7 @@ html, body {
 
 /* Links */
 #kc-forgot-password, #kc-registration {
-  margin-top: 1rem;
+  margin-top: clamp(0.5rem, 2vh, 1rem);
   text-align: center;
 }
 
@@ -320,7 +353,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin: 1rem 0;
+  margin: clamp(0.5rem, 2vh, 1rem) 0;
 }
 
 .checkbox input[type="checkbox"] {
@@ -337,7 +370,7 @@ html, body {
 
 /* Remember Me */
 #rememberme {
-  margin: 1rem 0;
+  margin: clamp(0.5rem, 2vh, 1rem) 0;
 }
 
 /* Header nav controls – matches the site's header__nav */
@@ -348,7 +381,7 @@ html, body {
   flex-shrink: 0;
 }
 
-/* Translucent pill button (back to site) – matches the locale switch pill */
+/* Pill button base (shared by the theme toggle) – matches the site's header controls */
 .kc-btn {
   display: inline-flex;
   align-items: center;
@@ -538,12 +571,12 @@ html, body {
 
 @media (max-width: 768px) {
   #kc-content-wrapper {
-    margin: 1rem auto;
+    margin: auto;
     padding: 0 0.75rem;
   }
 
   .card-pf {
-    padding: 1.5rem;
+    padding: clamp(1rem, 3vh, 1.5rem) 1rem;
   }
 
   #kc-header {
@@ -568,5 +601,31 @@ html, body {
 @media (max-width: 480px) {
   .kc-brand__title {
     display: none;
+  }
+}
+
+/* Short viewports: tighten spacing so the form fits without scrolling */
+@media (max-height: 620px) {
+  .card-pf {
+    padding: 0.75rem 1rem;
+  }
+
+  #kc-form,
+  #kc-form-login {
+    margin-top: 0.5rem;
+  }
+
+  .form-group {
+    margin-bottom: 0.5rem;
+  }
+
+  #kc-login, .btn-primary {
+    margin-top: 0.5rem;
+    padding: 0.5rem 1rem;
+  }
+
+  #kc-page-title {
+    font-size: 1.125rem;
+    margin: 0.25rem 0;
   }
 }

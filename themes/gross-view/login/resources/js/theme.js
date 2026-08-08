@@ -76,15 +76,12 @@
   // Header toolbar
   //
   // Rebuilds the Keycloak header so it mirrors the site's sticky toolbar:
-  // a brand block ("GV" + "Gross View") on the left and, on the right, a
-  // "back to site" button, the theme toggle and the RU / EN segmented locale
-  // switcher. All of these already exist in the site's header, so the login
-  // page no longer looks foreign. The brand and back button point at the site
-  // root, which nginx routes to the SPA.
+  // a brand block ("GV" + "Gross View") on the left and, on the right, the
+  // theme toggle and the RU / EN segmented locale switcher. All of these
+  // already exist in the site's header, so the login page no longer looks
+  // foreign. The brand links to the site root, which nginx routes to the SPA.
   // ---------------------------------------------------------------------------
 
-  var BACK_ARROW_ICON =
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>';
   var MOON_ICON =
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
   var SUN_ICON =
@@ -121,18 +118,6 @@
       return 'en';
     }
     return '';
-  }
-
-  function buildBackButton() {
-    var back = document.createElement('a');
-    back.className = 'kc-btn';
-    back.href = '/';
-    back.setAttribute(
-      'aria-label',
-      isRussian() ? 'Вернуться на сайт' : 'Back to site'
-    );
-    back.innerHTML = BACK_ARROW_ICON + (isRussian() ? 'На сайт' : 'Back to site');
-    return back;
   }
 
   function renderThemeToggle(button, isDark) {
@@ -234,7 +219,6 @@
     var nav = document.createElement('nav');
     nav.className = 'kc-header__nav';
     nav.setAttribute('aria-label', isRussian() ? 'Основная навигация' : 'Main navigation');
-    nav.appendChild(buildBackButton());
 
     var locale = document.getElementById('kc-locale');
     if (locale) {
