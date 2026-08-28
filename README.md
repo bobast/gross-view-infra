@@ -19,56 +19,53 @@ docker-compose up -d
 | keycloak   | 172.28.0.3    | - (internal)   | SSO / Identity Provider                   |
 | nginx      | 172.28.0.4    | 80, 443        | Reverse proxy (входная точка /sso, /api, /)|
 | n8n        | 172.28.0.5    | - (internal)   | Workflow automation                       |
-| tailscale  | 172.28.0.6    | - (internal)   | VPN-доступ к внутренним сервисам          |
+| wireguard  | 172.28.0.6    | 51820 (udp)    | VPN-доступ к внутренним сервисам          |
 | vault      | 172.28.0.7    | 8200           | Хранилище секретов                        |
 | dns        | 172.28.0.8    | 53 (tcp/udp)   | Внутренний DNS (dnsmasq)                  |
 
 Внутренняя подсеть: `172.28.0.0/24` (bridge, keycloak_network).
 
-## Tailscale (VPN)
+## WireGuard (VPN)
 
-Обеспечивает безопасный доступ к внутренним сервисам (Postgres, Keycloak admin, n8n) без их публикации наружу.
+Обеспечивает безопасный доступ к внутренним сервисам (Postgres, Keycloak admin, n8n) без их публикации наружу. Используется [linuxserver/wireguard](https://docs.linuxserver.io/images/docker-wireguard/) в режиме сервера.
 
 ### Настройка
 
-1. Зарегистрируйтесь в [Tailscale](https://tailscale.com) и получите auth key в Admin Console → Settings → Keys.
-2. Поместите ключ в `.env`:
+1. Укажите публичный IP или домен Docker-хоста в `.env`:
    ```
-   TS_AUTHKEY=tskey-auth-XXXXX
+   WG_SERVERURL=185.12.34.56   # или ваш домен; "auto" — определить автоматически
+   WG_PEERS=5                  # число клиентов (или список имён: myPC,myPhone,...)
    ```
-3. Поднимите стек. Подключение к VPN запустится автоматически.
-4. В Admin Console подтвердите регистрацию узла `gross-view-vpn` (или настройте auto-approve).
+2. Поднимите стек. При первом старте контейнер сгенерирует серверный ключ и конфиги для всех `WG_PEERS`.
+3. Соберите клиентские конфиги клиентов (текстовые и QR-коды):
+   - Лог контейнера: `docker logs wireguard` (при `LOG_CONFS=true`),
+   - Файлы: `docker exec -it wireguard cat /config/peer1/peer1.conf` (файлы `peerX.conf` и QR-коды `.png` лежат в `/config/peerX`).
+4. Импортируйте конфиг в клиент WireGuard (Windows/macOS/iOS/Android/классический Linux).
 
-### Доступные метки (MagicDNS)
+### Доступ к внутренним сервисам (split tunneling)
+
+Клиентам раздаются только внутренние подсети (`172.28.0.0/24` и адрес WG-сервера), поэтому через VPN идет только трафик к инфраструктуре gross-view, остальной интернет — обычным маршрутом. Адреса:
 
 - `postgres` — 172.28.0.2:5432
 - `keycloak` — 172.28.0.3:8080
 - `n8n` — 172.28.0.5:5678
+- `vault` — 172.28.0.7:8200
 
-### ACL (пример)
+В качестве DNS клиентам отдаётся внутренний dnsmasq (`172.28.0.8`), поэтому `*.local` имена (`postgres.local`, `auth.local`, ...) также резолвятся.
 
-В Admin Console → Access Controls. Разрешить доступ только определённым группам:
+### Добавление клиентов
 
-```json
-{
-  "groups": {
-    "group:developers": ["user1@example.com"],
-    "group:admins": ["admin@example.com"]
-  },
-  "acls": [
-    { "action": "accept", "src": ["group:developers"], "dst": ["postgres:5432"] },
-    { "action": "accept", "src": ["group:admins"], "dst": ["*:*"] }
-  ]
-}
-```
+Увеличьте `WG_PEERS` (или добавьте имена в список) и пересоздайте контейнер. Новые ключи генерируются только для свежих peer, старые сохраняются в `/config`. Обновлённые конфиги появятся в логе и в `/config/peerX`.
 
-> Настройте ACL **до** деплоя в облачный K8s, чтобы никто лишний не имел доступа к БД.
+### Проброс порта
+
+Клиенты подключаются к серверу по UDP-порту `51820`. Если хост за NAT, пробросьте `UDP 51820` на Docker-хост (в роутере/Mikrotik).
 
 ### Совместимость
 
-- Контейнеру нужен `/dev/net/tun` и capability `NET_ADMIN`.
-- На WSL2/Linux работает из коробки.
-- На Docker Desktop for Windows туннельное устройство снаружи может не пробрасываться — используйте WSL2 или таргетный Linux-хост/K8s.
+- Контейнеру нужен capability `NET_ADMIN`; `SYS_MODULE` + `/lib/modules` — если модуль `wireguard` не загружен в ядре хоста.
+- Работает на WSL2/Linux (модуль `wireguard` есть в новых ядрах), а также на macOS/Windows как клиент.
+- Для работы вне Docker Desktop подойдёт таргетный Linux-хост/K8s.
 
 ## Vault (секреты)
 
@@ -140,17 +137,22 @@ N8N_DB_PSWD=
 N8N_ENCRYPTION_KEY=
 GENERIC_TIMEZONE=
 
-TS_AUTHKEY=tskey-auth-XXXXX
+WG_SERVERURL=auto
+WG_PEERS=5
+WG_PEERDNS=172.28.0.8
+WG_INTERNAL_SUBNET=10.13.13.0
+PUID=1000
+PGID=1000
 ```
 
 `.env` и `certs/` в `.gitignore` — не коммитьте их.
 
 ## Деплой в облачный K8s (план)
 
-1. Tailscale оставить как sidecar/Deployment (или использовать Tailscale Kubernetes Operator).
+1. WireGuard оставить как sidecar/Deployment (или перейти на Tailscale Kubernetes Operator / Cloud VPN).
 2. Vault перевести на K8s-хранилище (etcd/file) с auto-unseal через cloud KMS.
 3. Ресурсы K8s обрабатывать через Vault Agent Injector / external secrets.
-4. Публиковать через Ingress только nginx (`gross-view.local`); Postgres и внутренние API — только через Tailscale/ClusterIP.
+4. Публиковать через Ingress только nginx (`gross-view.local`); Postgres и внутренние API — только через WireGuard/VPN/ClusterIP.
 
 ## Структура
 
