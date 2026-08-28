@@ -1,3 +1,5 @@
 /.idea/
 /.env
 /certs/
+/vault/data/
+/dns/dnsmasq.leases
