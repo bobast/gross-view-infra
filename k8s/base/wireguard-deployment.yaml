@@ -1,0 +1,97 @@
+# WireGuard VPN server - Deployment
+# Mirrors docker-compose wireguard service (linuxserver/wireguard, server mode).
+#
+# K8s notes vs Docker:
+#   - Requires privileged/root + NET_ADMIN (and SYS_MODULE if the wireguard
+#     kernel module is not loaded on nodes). Adjust securityContext for your
+#     cluster's PodSecurity admission.
+#   - The /lib/modules host mount is optional; omit if nodes already have the
+#     wireguard module loaded.
+#   - Peer configs / QR codes are written to the wireguard-config PVC under
+#     /config/peerX (docker-compose used the wireguard_config volume).
+#   - Split tunneling: ALLOWEDIPS limits peer routes to the cluster pod/service
+#     CIDR and the WG server address. Update K8S_POD_CIDR / K8S_SERVICE_CIDR to
+#     your cluster ranges (the 172.28.0.0/24 CIDR no longer applies in K8s).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wireguard
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: wireguard
+    app.kubernetes.io/part-of: gross-view
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wireguard
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: wireguard
+        app.kubernetes.io/part-of: gross-view
+    spec:
+      securityContext:
+        runAsUser: 0
+        capabilities:
+          add:
+            - NET_ADMIN
+            - SYS_MODULE
+        sysctls:
+          - name: net.ipv4.conf.all.src_valid_mark
+            value: "1"
+      # ip forwarding for NAT between tunnel and cluster
+      hostNetwork: false
+      containers:
+        - name: wireguard
+          image: lscr.io/linuxserver/wireguard:latest
+          env:
+            - name: PUID
+              value: "1000"
+            - name: PGID
+              value: "1000"
+            - name: TZ
+              value: Europe/Kyiv
+            - name: SERVERURL
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: wg_serverurl } }
+            - name: SERVERPORT
+              value: "51820"
+            - name: PEERS
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: wg_peers } }
+            - name: PEERDNS
+              # point clients to the in-cluster dnsmasq Service (change IP if not using this deployment)
+              value: "172.28.0.8"
+            - name: INTERNAL_SUBNET
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: wg_internal_subnet } }
+            # docker-compose used 172.28.0.0/24,10.13.13.1 -> in K8s allow pod/service CIDR + tunnel addr
+            - name: ALLOWEDIPS
+              value: "10.13.13.1"
+            - name: PERSISTENTKEEPALIVE_PEERS
+              value: "all"
+            - name: LOG_CONFS
+              value: "true"
+          ports:
+            - name: wireguard
+              containerPort: 51820
+              protocol: UDP
+          volumeMounts:
+            - name: wireguard-config
+              mountPath: /config
+            # optional; only if the wireguard kernel module is not loaded on nodes
+            - name: host-modules
+              mountPath: /lib/modules
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+      volumes:
+        - name: wireguard-config
+          persistentVolumeClaim:
+            claimName: wireguard-config
+        - name: host-modules
+          hostPath:
+            path: /lib/modules
+            type: ""

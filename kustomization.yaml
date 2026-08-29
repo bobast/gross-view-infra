@@ -1,0 +1,31 @@
+# Root Kustomize build for the gross-view infrastructure.
+# Apply with:
+#   kubectl apply -k . -n gross-view
+#
+# This root kustomization includes the manifests in k8s/base and generates the
+# Keycloak theme + realm ConfigMaps from the local theme/ and realm files
+# (configMapGenerator cannot reference files outside its own directory, so the
+# generator lives here at the repo root where those files reside).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - k8s/base
+
+configMapGenerator:
+  # Keycloak custom theme -> mounted at /opt/keycloak/themes
+  - name: keycloak-theme
+    namespace: gross-view
+    files:
+      - login/theme.properties=themes/gross-view/login/theme.properties
+      - login/messages/login.properties=themes/gross-view/login/messages/login.properties
+      - login/messages/login_en.properties=themes/gross-view/login/messages/login_en.properties
+      - login/messages/login_ru.properties=themes/gross-view/login/messages/login_ru.properties
+      - login/resources/css/login.css=themes/gross-view/login/resources/css/login.css
+      - login/resources/js/theme.js=themes/gross-view/login/resources/js/theme.js
+
+  # Keycloak realm import -> mounted at /opt/keycloak/data/import/gross-view-realm.json
+  - name: keycloak-realm
+    namespace: gross-view
+    files:
+      - gross-view-realm.json=gross-view-realm.json

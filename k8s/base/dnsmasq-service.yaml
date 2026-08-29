@@ -1,0 +1,24 @@
+# dnsmasq - DNS service (53/TCP+UDP).
+# docker-compose published 53 on the host; in K8s use ClusterIP inside the
+# cluster, or LoadBalancer/ExternalIP to expose to VPN clients.
+apiVersion: v1
+kind: Service
+metadata:
+  name: dns
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: dns
+    app.kubernetes.io/part-of: gross-view
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: dns
+  ports:
+    - name: dns-tcp
+      port: 53
+      protocol: TCP
+      targetPort: 53
+    - name: dns-udp
+      port: 53
+      protocol: UDP
+      targetPort: 53

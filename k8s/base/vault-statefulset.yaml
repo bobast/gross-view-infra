@@ -1,0 +1,79 @@
+# Vault - StatefulSet
+# Mirrors docker-compose vault service:
+#   image: hashicorp/vault:latest, IPC_LOCK cap
+#   volumes: vault_data -> /vault/data, ./vault/config -> /vault/config
+#   command: vault server -config=/vault/config/vault.hcl
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: vault
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: vault
+    app.kubernetes.io/part-of: gross-view
+spec:
+  serviceName: vault
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vault
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vault
+        app.kubernetes.io/part-of: gross-view
+    spec:
+      securityContext:
+        # docker-compose used cap_add: IPC_LOCK for mlock; disable_mlock is set in
+        # vault.hcl so IPC_LOCK is not required, but keep the capability for parity.
+        capabilities:
+          add: ["IPC_LOCK"]
+      containers:
+        - name: vault
+          image: hashicorp/vault:latest
+          args: ["server", "-config=/vault/config/vault.hcl"]
+          env:
+            - name: VAULT_ADDR
+              value: http://0.0.0.0:8200
+          ports:
+            - name: http
+              containerPort: 8200
+          volumeMounts:
+            - name: vault-config
+              mountPath: /vault/config
+              readOnly: true
+            - name: vault-data
+              mountPath: /vault/data
+          readinessProbe:
+            # vault /v1/sys/health returns 501 when unsealed-but-not-initialized,
+            # so a raw TCP check is more reliable for readiness after restart.
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: vault-config
+          configMap:
+            name: vault-config
+  volumeClaimTemplates:
+    - metadata:
+        name: vault-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+        # storageClassName: standard

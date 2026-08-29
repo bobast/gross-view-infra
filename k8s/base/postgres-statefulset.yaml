@@ -1,0 +1,112 @@
+# PostgreSQL (TimescaleDB) - StatefulSet
+# Mirrors docker-compose postgres service:
+#   image: timescale/timescaledb:2.17.2-pg16
+#   command: postgres -c shared_preload_libraries=timescaledb
+#   volumes: postgres_data, ./postgres/init
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: gross-view
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/part-of: gross-view
+    spec:
+      volumes:
+        - name: init-scripts
+          configMap:
+            name: postgres-init
+            defaultMode: 0755
+      containers:
+        - name: postgres
+          image: timescale/timescaledb:2.17.2-pg16
+          command: ["postgres", "-c", "shared_preload_libraries=timescaledb"]
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: gross-view-secrets
+                  key: postgres_db
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: gross-view-secrets
+                  key: postgres_user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gross-view-secrets
+                  key: postgres_password
+            # Database/user/password for the other services, used by init scripts
+            - name: KC_DB_NAME
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: kc_db_name } }
+            - name: KC_DB_USER
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: kc_db_user } }
+            - name: KC_DB_PSWD
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: kc_db_password } }
+            - name: GV_DB_NAME
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: gv_db_name } }
+            - name: GV_DB_USER
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: gv_db_user } }
+            - name: GV_DB_PSWD
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: gv_db_password } }
+            - name: N8N_DB_NAME
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: n8n_db_name } }
+            - name: N8N_DB_USER
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: n8n_db_user } }
+            - name: N8N_DB_PSWD
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: n8n_db_password } }
+          ports:
+            - name: postgres
+              containerPort: 5432
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 5
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 10
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 1Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+        # storageClassName: standard

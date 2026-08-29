@@ -1,0 +1,63 @@
+# Ingress - replaces the nginx reverse proxy from docker-compose.
+# Routes:
+#   /sso*          -> keycloak (SSO)
+#   /api*          -> gross-view-api backend (gross-view-ui repo)
+#   /*             -> gross-view-ui frontend
+# TLS terminates here (ingress-nginx), mirroring the nginx ssl block.
+#
+# NOTE: the API and UI backend/frontend services below must exist in the cluster
+# (they are application code, not this infra repo). Adjust service names/ports
+# and the host to match your environment.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gross-view
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: nginx
+    app.kubernetes.io/part-of: gross-view
+  annotations:
+    # redirect http -> https, matching the nginx `return 301` server block
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # preserve original scheme into proxied apps
+    nginx.ingress.kubernetes.io/proxy-redirect-from: "http://"
+    nginx.ingress.kubernetes.io/proxy-redirect-to: "https://"
+    # long timeouts for the /api streaming/SSE proxying (was proxy_read_timeout 3600s)
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # websockets for the UI dev server (Host header / Upgrade / Connection)
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - gross-view.local
+      secretName: gross-view-tls
+  rules:
+    - host: gross-view.local
+      http:
+        paths:
+          - path: /sso
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  number: 8080
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: gross-view-api
+                port:
+                  number: 8082
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gross-view-ui
+                port:
+                  number: 5173

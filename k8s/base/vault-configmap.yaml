@@ -1,0 +1,31 @@
+# Vault server config (from vault/config/vault.hcl).
+# File storage on a PersistentVolume; TLS disabled (dev) — enable in production.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-config
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: vault
+    app.kubernetes.io/part-of: gross-view
+data:
+  vault.hcl: |
+    storage "file" {
+      path = "/vault/data"
+    }
+
+    listener "tcp" {
+      address     = "0.0.0.0:8200"
+      tls_disable = 1
+      # In production, enable TLS:
+      # tls_cert_file = "/vault/config/tls/vault.crt"
+      # tls_key_file  = "/vault/config/tls/vault.key"
+    }
+
+    api_addr = "http://0.0.0.0:8200"
+
+    ui = true
+
+    log_level = "info"
+
+    disable_mlock = true

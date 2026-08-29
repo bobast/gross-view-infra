@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: gross-view
+spec:
+  # StatefulSet gives stable DNS name postgres-0; headless service keeps it stable
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432

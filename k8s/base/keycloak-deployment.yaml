@@ -1,0 +1,101 @@
+# Keycloak - Deployment
+# Mirrors docker-compose keycloak service:
+#   image: quay.io/keycloak/keycloak:23.0.6
+#   command: start --import-realm
+#   volumes: ./themes -> /opt/keycloak/themes, realm.json -> import
+# The theme and realm JSON are provisioned by Kustomize generators
+# (see kustomization.yaml -> configMapGenerator).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/part-of: gross-view
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: keycloak
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/part-of: gross-view
+    spec:
+      volumes:
+        - name: themes
+          configMap:
+            name: keycloak-theme
+        - name: realm-import
+          configMap:
+            name: keycloak-realm
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:23.0.6
+          args: ["start", "--import-realm"]
+          env:
+            # Hostname / proxy settings (matching nginx Ingress paths)
+            - name: KC_HOSTNAME_URL
+              value: https://gross-view.local/sso
+            - name: KC_HOSTNAME_ADMIN_URL
+              value: https://gross-view.local/sso
+            - name: KC_HOSTNAME_STRICT
+              value: "true"
+            - name: KC_HOSTNAME_STRICT_HTTPS
+              value: "true"
+            - name: KC_HOSTNAME_STRICT_BACKCHANNEL
+              value: "false"
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KC_PROXY_HEADERS
+              value: xforwarded
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+            - name: KEYCLOAK_ADMIN
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: keycloak_admin } }
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: keycloak_admin_password } }
+            # Database
+            - name: KC_DB
+              value: postgres
+            # matches kc_db_name secret (default "keycloak") created by init script
+            - name: KC_DB_URL
+              value: jdbc:postgresql://postgres/keycloak
+            - name: KC_DB_USERNAME
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: kc_db_user } }
+            - name: KC_DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: kc_db_password } }
+          ports:
+            - name: http
+              containerPort: 8080
+          volumeMounts:
+            - name: themes
+              mountPath: /opt/keycloak/themes
+            - name: realm-import
+              mountPath: /opt/keycloak/data/import/gross-view-realm.json
+              subPath: gross-view-realm.json
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /sso/health/ready
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /sso/health/live
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 10
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 1Gi

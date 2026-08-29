@@ -147,7 +147,20 @@ PGID=1000
 
 `.env` и `certs/` в `.gitignore` — не коммитьте их.
 
-## Деплой в облачный K8s (план)
+## Деплой в K8s
+
+Готовые манифесты для деплоя в Kubernetes находятся в `k8s/` (зеркало docker-compose стека).
+
+```bash
+# 1. Заполните секреты в k8s/base/secret.yaml (замените changeme)
+# 2. Заполните TLS-сертификат в k8s/base/tls-secret.yaml (из certs/)
+# 3. Примените (из корня репозитория)
+kubectl apply -k .
+```
+
+Соответствие сервисов: postgres → StatefulSet, keycloak → Deployment, nginx → Ingress (ingress-nginx), n8n → Deployment, vault → StatefulSet, wireguard → Deployment + LoadBalancer, dns → Deployment. Тема и realm Keycloak встраиваются в ConfigMap через `configMapGenerator` в корневом `kustomization.yaml`.
+
+Планы на продакшен-кластер:
 
 1. WireGuard оставить как sidecar/Deployment (или перейти на Tailscale Kubernetes Operator / Cloud VPN).
 2. Vault перевести на K8s-хранилище (etcd/file) с auto-unseal через cloud KMS.
@@ -158,6 +171,8 @@ PGID=1000
 
 ```
 ├── docker-compose.yml
+├── kustomization.yaml          # K8s: theme + realm ConfigMaps
+├── k8s/base/                   # K8s-манифесты (Namespace, Secrets, workload, Ingress)
 ├── .env
 ├── dns/
 │   └── dnsmasq.conf

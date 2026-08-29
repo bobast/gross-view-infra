@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gross-view
+  labels:
+    app.kubernetes.io/name: gross-view
+    app.kubernetes.io/part-of: gross-view

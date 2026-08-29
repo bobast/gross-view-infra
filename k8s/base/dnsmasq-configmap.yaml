@@ -1,0 +1,53 @@
+# dnsmasq config (from dns/dnsmasq.conf).
+# NOTE: the address= entries below still reference the old Docker bridge IPs
+# (172.28.0.x) from docker-compose. In K8s, pod IPs are dynamic, so prefer
+# pointing clients at the cluster's CoreDNS (service names <svc>.<ns>.svc.cluster.local)
+# or update these entries to static addresses you assign (e.g. via LoadBalancer
+# IPs or ExternalIPs). Keep the upstream forwarding + caching from the original.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dnsmasq-config
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: dns
+    app.kubernetes.io/part-of: gross-view
+data:
+  dnsmasq.conf: |
+    listen-address=0.0.0.0
+    bind-interfaces
+    cache-size=1000
+    log-queries
+    log-facility=/var/log/dnsmasq.log
+
+    server=8.8.8.8
+    server=8.8.4.4
+    no-resolv
+    domain-needed
+    bogus-priv
+
+    local=/local/
+    domain=local
+
+    address=/postgres/local/172.28.0.2
+    address=/keycloak/local/172.28.0.3
+    address=/nginx/local/172.28.0.4
+    address=/n8n/local/172.28.0.5
+    address=/wireguard/local/172.28.0.6
+    address=/vault/local/172.28.0.7
+    address=/dns/local/172.28.0.8
+
+    address=/db.local/172.28.0.2
+    address=/auth.local/172.28.0.3
+    address=/proxy.local/172.28.0.4
+    address=/workflow.local/172.28.0.5
+    address=/vpn.local/172.28.0.6
+    address=/secrets.local/172.28.0.7
+
+    address=/postgres/172.28.0.2
+    address=/keycloak/172.28.0.3
+    address=/nginx/172.28.0.4
+    address=/n8n/172.28.0.5
+    address=/wireguard/172.28.0.6
+    address=/vault/172.28.0.7
+    address=/dns/172.28.0.8

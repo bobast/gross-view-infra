@@ -1,0 +1,58 @@
+# dnsmasq - Deployment
+# Mirrors docker-compose dns service (jpillora/dnsmasq, mounts ./dns/dnsmasq.conf).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dns
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: dns
+    app.kubernetes.io/part-of: gross-view
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dns
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dns
+        app.kubernetes.io/part-of: gross-view
+    spec:
+      containers:
+        - name: dnsmasq
+          image: jpillora/dnsmasq:latest
+          ports:
+            - name: dns-tcp
+              containerPort: 53
+              protocol: TCP
+            - name: dns-udp
+              containerPort: 53
+              protocol: UDP
+          volumeMounts:
+            - name: dnsmasq-config
+              mountPath: /etc/dnsmasq.conf
+              subPath: dnsmasq.conf
+              readOnly: true
+          readinessProbe:
+            tcpSocket:
+              port: dns-tcp
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            tcpSocket:
+              port: dns-tcp
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+      volumes:
+        - name: dnsmasq-config
+          configMap:
+            name: dnsmasq-config

@@ -1,0 +1,30 @@
+# Kustomize base for the gross-view infrastructure on Kubernetes.
+# appends the Keycloak theme + realm ConfigMaps via the root kustomization.yaml.
+# Apply with:  kubectl apply -k .
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: gross-view
+
+resources:
+  - namespace.yaml
+  - secret.yaml
+  - postgres-init-configmap.yaml
+  - postgres-service.yaml
+  - postgres-statefulset.yaml
+  - keycloak-deployment.yaml
+  - keycloak-service.yaml
+  - n8n-deployment.yaml
+  - n8n-service.yaml
+  - n8n-pvc.yaml
+  - vault-configmap.yaml
+  - vault-service.yaml
+  - vault-statefulset.yaml
+  - wireguard-deployment.yaml
+  - wireguard-service.yaml
+  - wireguard-pvc.yaml
+  - dnsmasq-configmap.yaml
+  - dnsmasq-deployment.yaml
+  - dnsmasq-service.yaml
+  - tls-secret.yaml
+  - ingress.yaml

@@ -1,0 +1,19 @@
+# WireGuard server - service exposing UDP 51820.
+# Use a LoadBalancer (or NodePort) so VPN clients can reach the server from outside.
+apiVersion: v1
+kind: Service
+metadata:
+  name: wireguard
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: wireguard
+    app.kubernetes.io/part-of: gross-view
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: wireguard
+  ports:
+    - name: wireguard
+      port: 51820
+      protocol: UDP
+      targetPort: 51820

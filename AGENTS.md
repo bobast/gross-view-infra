@@ -10,7 +10,10 @@ This repository manages **infrastructure configuration** for the "gross-view" pr
 
 - `gross-view-realm.json` — Keycloak realm configuration (exported/imported)
 - `docker-compose.yml` — Docker Compose stack: PostgreSQL, Keycloak, Nginx, n8n, WireGuard, Vault, dnsmasq
-- `nginx/gross-view.local.conf` — Nginx site config for `gross-view.local`
+- `kustomization.yaml` — Root Kustomize build generating Keycloak theme + realm ConfigMaps (apply with `kubectl apply -k .`)
+- `k8s/` — Kubernetes manifests (alternative to docker-compose for cloud/K8s deployment)
+  - `k8s/base/` — Namespace, Secrets, and per-service Deployments/StatefulSets/Services/ConfigMaps/Ingress
+- `nginx/gross-view.local.conf` — Nginx site config for `gross-view.local` (used by docker-compose; in K8s replaced by `k8s/base/ingress.yaml`)
 - `dns/dnsmasq.conf` — Internal DNS (dnsmasq) config: static hostnames + `.local` aliases for all services on `172.28.0.0/24`
 - `vault/config/vault.hcl` — HashiCorp Vault server config (file storage, TLS disabled in dev, `ui = true`)
 - `.env.example` — Template for environment variables (gitignored `.env` holds secrets)
@@ -53,7 +56,7 @@ This repo manages reverse proxy routing, Keycloak theme customizations, realm se
 
 ## Important Notes
 
-- Nginx config changes affect routing for the entire `gross-view.local` site
+- Nginx config changes affect routing for the entire `gross-view.local` site. In K8s this routing is defined by `k8s/base/ingress.yaml` (ingress-nginx) instead — keep the two in sync if one is changed.
 - CSS changes affect the visual appearance of Keycloak login/registration screens
 - Realm JSON should only be modified carefully — it defines clients, roles, mappers, and identity providers
 - Do not add application source code here — this is configuration-only
@@ -61,6 +64,24 @@ This repo manages reverse proxy routing, Keycloak theme customizations, realm se
 - `login.css` supports light/dark via the `data-theme` attribute on `<html>`; keep the semantic tokens (`--color-surface`, `--color-body-bg`, `--color-on-accent`, `--color-accent`, status tokens) in `:root` and the `[data-theme='dark']` block in sync with `src/app/index.css` of gross-view-ui
 - The theme is applied to the login page by `js/theme.js` (declared via `scripts=` in `theme.properties`); its storage key must match `THEME_STORAGE_KEY` in `src/features/theme/model.ts` of gross-view-ui
 - Do not commit or log: `WG_*` secrets in `.env`, `wireguard_config` generated peer/private keys, Vault unseal keys, Vault root token, or contents of `.env` / `certs/`
+
+## Kubernetes (K8s) deployment
+
+The `k8s/` directory mirrors the docker-compose stack for cloud/K8s. Both describe the same services; keep them in sync.
+
+- Apply with `kubectl apply -k .` from the repo root. The **root** `kustomization.yaml` uses `configMapGenerator` to embed the Keycloak theme (`themes/gross-view/`) and realm (`gross-view-realm.json`) into ConfigMaps because kustomize cannot reference files outside its own directory.
+- Service → manifest mapping (all in `gross-view` namespace):
+  - postgres → `k8s/base/postgres-statefulset.yaml` (StatefulSet + headless `Service` + `volumeClaimTemplates`, `postgres-init` ConfigMap for init scripts)
+  - keycloak → `k8s/base/keycloak-deployment.yaml` (Deployment + `Service`, mounts generated `keycloak-theme` / `keycloak-realm` ConfigMaps)
+  - nginx → replaced by `k8s/base/ingress.yaml` (ingress-nginx, routes `/sso` → keycloak, `/api` → `gross-view-api`, `/` → `gross-view-ui`)
+  - n8n → `k8s/base/n8n-deployment.yaml` (Deployment + `Service` + `n8n-data` PVC)
+  - vault → `k8s/base/vault-statefulset.yaml` (StatefulSet + `Service` + `volumeClaimTemplates`, `vault-config` ConfigMap with vault.hcl)
+  - wireguard → `k8s/base/wireguard-deployment.yaml` (Deployment + LoadBalancer `Service` UDP 51820, privileged + NET_ADMIN/SYS_MODULE)
+  - dns → `k8s/base/dnsmasq-deployment.yaml` (Deployment + `Service` 53/tcp+udp, `dnsmasq-config` ConfigMap)
+- Secrets: `k8s/base/secret.yaml` holds placeholder values (`changeme`) in a single `gross-view-secrets` Secret. Fill real values before applying; for production use ExternalSecrets/Vault instead.
+- TLS: the Ingress references `gross-view-tls` (`k8s/base/tls-secret.yaml`) — fill the base64 cert/key from the gitignored `certs/` dir.
+- Cluster-specific changes (StorageClass, replicas, WireGuard CIDRs) are applied by adding `patches` to the root `kustomization.yaml`. A nested `k8s/overlays` directory is NOT possible: kustomize forbids an overlay inside the repo root from including the root kustomization (cycle), and `configMapGenerator` cannot reach theme/realm files outside its own directory, so the root is the single build point.
+- The static `172.28.0.0/24` IPs in `dns/dnsmasq.conf` and WireGuard `PEERDNS`/`ALLOWEDIPS` are Docker-era and do NOT apply to K8s (dynamic pod IPs). In K8s prefer the cluster's CoreDNS (`<svc>.<ns>.svc.cluster.local`) and update WireGuard ALLOWEDIPS to the pod/service CIDR.
 
 ## Available Skills
 

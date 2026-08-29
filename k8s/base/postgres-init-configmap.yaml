@@ -1,0 +1,35 @@
+# Init scripts run on first start of the postgres container.
+# They reference env vars (KC_DB_NAME, GV_DB_NAME, ...) injected into the pod,
+# mirroring docker-compose's ./postgres/init:/docker-entrypoint-initdb.d mount.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/part-of: gross-view
+data:
+  init-keycloak-db.sh: |
+    #!/bin/bash
+    set -e
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+        CREATE ROLE "${KC_DB_USER}" LOGIN PASSWORD '${KC_DB_PSWD}' CREATEDB;
+        CREATE DATABASE "${KC_DB_NAME}" OWNER "${KC_DB_USER}";
+    EOSQL
+  init-gross-view-db.sh: |
+    #!/bin/bash
+    set -e
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+        CREATE ROLE "${GV_DB_USER}" LOGIN PASSWORD '${GV_DB_PSWD}' SUPERUSER;
+        CREATE DATABASE "${GV_DB_NAME}" OWNER "${GV_DB_USER}";
+    EOSQL
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$GV_DB_NAME" <<-EOSQL
+        CREATE EXTENSION IF NOT EXISTS timescaledb;
+    EOSQL
+  init-n8n-db.sh: |
+    #!/bin/bash
+    set -e
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+        CREATE ROLE "${N8N_DB_USER}" LOGIN PASSWORD '${N8N_DB_PSWD}';
+        CREATE DATABASE "${N8N_DB_NAME}" OWNER "${N8N_DB_USER}";
+    EOSQL
