@@ -1,0 +1,81 @@
+# certbot - CronJob.
+# Issues/renews the Let's Encrypt certificate for mint-box.ru via HTTP-01
+# (webroot in the shared `certbot-data` PVC), then writes the PEM files into
+# the `mint-box-tls` Secret and rolls the nginx Deployment so nginx picks up
+# the new cert. The deploy-hook only runs when a certificate actually changed.
+#
+# Bootstrap: the nginx pod cannot start until `mint-box-tls` exists. Either run
+# this job once first:
+#   kubectl create job --from=cronjob/certbot certbot-bootstrap -n gross-view
+# or pre-create the Secret manually.
+# Replace admin@mint-box.ru with a real contact email. Requires DNS for
+# mint-box.ru/www.mint-box.ru to point at the node/LB and inbound port 80.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: certbot
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: certbot
+    app.kubernetes.io/part-of: gross-view
+spec:
+  schedule: "0 3 * * *"
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: certbot
+          initContainers:
+            - name: kubectl-provider
+              image: lachlanevenson/k8s-kubectl:v1.28.4
+              command:
+                - sh
+                - -c
+                - "cp /usr/local/bin/kubectl /tools/kubectl && chmod +x /tools/kubectl"
+              volumeMounts:
+                - name: tools
+                  mountPath: /tools
+          containers:
+            - name: certbot
+              image: certbot/certbot:v2.7.4
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  cat > /tools/apply-cert.sh <<'SH'
+                  #!/bin/sh
+                  /tools/kubectl create secret tls mint-box-tls \
+                    --cert=/etc/letsencrypt/live/mint-box.ru/fullchain.pem \
+                    --key=/etc/letsencrypt/live/mint-box.ru/privkey.pem \
+                    -n gross-view --dry-run=client -o yaml \
+                    | /tools/kubectl apply -f -
+                  /tools/kubectl -n gross-view patch deployment nginx -p \
+                    '{"spec":{"template":{"metadata":{"annotations":{"certbot/mint-box.ru":"`date +%s`"}}}}}'
+                  SH
+                  chmod +x /tools/apply-cert.sh
+                  if [ ! -d /etc/letsencrypt/live/mint-box.ru ]; then
+                    certbot certonly --webroot -w /var/www/certbot \
+                      -d mint-box.ru -d www.mint-box.ru \
+                      --non-interactive --agree-tos --email admin@mint-box.ru \
+                      --deploy-hook /tools/apply-cert.sh
+                  else
+                    certbot renew --non-interactive --deploy-hook /tools/apply-cert.sh
+                  fi
+              volumeMounts:
+                - name: certbot-data
+                  mountPath: /var/www/certbot
+                - name: letsencrypt
+                  mountPath: /etc/letsencrypt
+                - name: tools
+                  mountPath: /tools
+          volumes:
+            - name: certbot-data
+              persistentVolumeClaim:
+                claimName: certbot-data
+            - name: letsencrypt
+              persistentVolumeClaim:
+                claimName: certbot-data
+            - name: tools
+              emptyDir: {}

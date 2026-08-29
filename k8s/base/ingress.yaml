@@ -1,13 +1,14 @@
-# Ingress - replaces the nginx reverse proxy from docker-compose.
-# Routes:
-#   /sso*          -> keycloak (SSO)
-#   /api*          -> gross-view-api backend (gross-view-ui repo)
-#   /*             -> gross-view-ui frontend
-# TLS terminates here (ingress-nginx), mirroring the nginx ssl block.
+# Ingress - kept REFERENCE-ONLY. NOT part of the kustomize build (see
+# kustomization.yaml). The nginx Deployment + LoadBalancer Service terminate
+# TLS and are the sole entry point; applying this Ingress would take over node
+# ports 80/443 (ingress-nginx) and route traffic AROUND the nginx pod.
+# If a previously-applied ingress is still present in the cluster, remove it:
+#   kubectl -n gross-view delete ingress gross-view
 #
-# NOTE: the API and UI backend/frontend services below must exist in the cluster
-# (they are application code, not this infra repo). Adjust service names/ports
-# and the host to match your environment.
+# Routing model when re-enabled:
+#   /sso*          -> nginx Service (then nginx pod -> keycloak)
+#   /api*          -> nginx Service (then nginx pod -> gross-view-api)
+#   /*             -> nginx Service (then nginx pod -> gross-view-ui)
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:

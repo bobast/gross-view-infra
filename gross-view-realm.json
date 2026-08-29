@@ -539,7 +539,7 @@
     "enabled" : true,
     "alwaysDisplayInConsole" : false,
     "clientAuthenticatorType" : "client-secret",
-    "redirectUris" : [ "http://localhost:5173/*", "http://gross-view.local/*", "https://gross-view.local/*" ],
+    "redirectUris" : [ "http://localhost:5173/*", "http://gross-view.local/*", "https://gross-view.local/*", "https://mint-box.ru/*" ],
     "webOrigins" : [ "+" ],
     "notBefore" : 0,
     "bearerOnly" : false,

@@ -1,0 +1,24 @@
+# nginx - Service (entry point of the whole stack).
+# Port 80: http-to-https redirect + ACME HTTP-01 challenges.
+# Port 443: TLS terminated by nginx (upstream of this repo's routing).
+# On k3s the built-in klipper LoadBalancer assigns the node IP; on other
+# clusters adjust the type (ClusterIP + external LB / NodePort) as needed.
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: nginx
+    app.kubernetes.io/part-of: gross-view
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: nginx
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+    - name: https
+      port: 443
+      targetPort: https

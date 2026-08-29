@@ -1,0 +1,73 @@
+# nginx - Deployment (reverse proxy, TLS terminator for mint-box.ru).
+# Mirrors the docker-compose nginx service. Certificates come from the
+# `mint-box-tls` Secret (authored by the certbot CronJob); the HTTP-01 webroot
+# is the shared `certbot-data` PVC so the certbot pod can write challenge files.
+# Bootstrap note: the pod will not start until the `mint-box-tls` Secret exists
+# (run the certbot CronJob once or pre-create the Secret manually).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: nginx
+    app.kubernetes.io/part-of: gross-view
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nginx
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nginx
+        app.kubernetes.io/part-of: gross-view
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:stable-alpine
+          ports:
+            - name: http
+              containerPort: 80
+            - name: https
+              containerPort: 443
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d
+              readOnly: true
+            - name: tls
+              mountPath: /etc/nginx/certs
+              readOnly: true
+            - name: certbot-data
+              mountPath: /var/www/certbot
+          readinessProbe:
+            httpGet:
+              # port 80 answers with a 301 redirect to https (3xx = healthy)
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: nginx-config
+        - name: tls
+          secret:
+            secretName: mint-box-tls
+        - name: certbot-data
+          persistentVolumeClaim:
+            claimName: certbot-data

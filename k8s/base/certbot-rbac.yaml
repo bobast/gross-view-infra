@@ -1,0 +1,44 @@
+# certbot - RBAC.
+# Grants the certbot CronJob pod the rights to write the `mint-box-tls` Secret
+# and patch (roll) the nginx Deployment so it re-reads the new certificate.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: certbot
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: certbot
+    app.kubernetes.io/part-of: gross-view
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: certbot
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: certbot
+    app.kubernetes.io/part-of: gross-view
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: certbot
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: certbot
+    app.kubernetes.io/part-of: gross-view
+subjects:
+  - kind: ServiceAccount
+    name: certbot
+    namespace: gross-view
+roleRef:
+  kind: Role
+  name: certbot
+  apiGroup: rbac.authorization.k8s.io

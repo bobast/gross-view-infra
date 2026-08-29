@@ -14,6 +14,9 @@ resources:
   - postgres-statefulset.yaml
   - keycloak-deployment.yaml
   - keycloak-service.yaml
+  - nginx-configmap.yaml
+  - nginx-deployment.yaml
+  - nginx-service.yaml
   - n8n-deployment.yaml
   - n8n-service.yaml
   - n8n-pvc.yaml
@@ -26,5 +29,10 @@ resources:
   - dnsmasq-configmap.yaml
   - dnsmasq-deployment.yaml
   - dnsmasq-service.yaml
+  - certbot-pvc.yaml
+  - certbot-rbac.yaml
+  - certbot-cronjob.yaml
   - tls-secret.yaml
-  - ingress.yaml
+  # ingress.yaml is intentionally NOT listed: the nginx Deployment + Service now
+  # terminate TLS and are the entry point. Keep ingress.yaml for reference when
+  # switching back to ingress-nginx (it would conflict on node ports 80/443).

@@ -153,26 +153,29 @@ PGID=1000
 
 ```bash
 # 1. Заполните секреты в k8s/base/secret.yaml (замените changeme)
-# 2. Заполните TLS-сертификат в k8s/base/tls-secret.yaml (из certs/)
-# 3. Примените (из корня репозитория)
+# 2. Примените (из корня репозитория)
 kubectl apply -k .
+# 3. Выдайте первый Let's Encrypt сертификат для mint-box.ru:
+#    (nginx-под не поднимется, пока не создан Secret mint-box-tls)
+kubectl create job --from=cronjob/certbot certbot-bootstrap -n gross-view
+kubectl logs job/certbot-bootstrap -n gross-view
 ```
 
-Соответствие сервисов: postgres → StatefulSet, keycloak → Deployment, nginx → Ingress (ingress-nginx), n8n → Deployment, vault → StatefulSet, wireguard → Deployment + LoadBalancer, dns → Deployment. Тема и realm Keycloak встраиваются в ConfigMap через `configMapGenerator` в корневом `kustomization.yaml`.
+Соответствие сервисов: postgres → StatefulSet, keycloak → Deployment, nginx → Deployment + LoadBalancer (80/443, TLS-терминация для mint-box.ru), n8n → Deployment, vault → StatefulSet, wireguard → Deployment + LoadBalancer, dns → Deployment, certbot → CronJob (Let's Encrypt, HTTP-01/webroot, ежедневное обновление → Secret `mint-box-tls` + рестарт nginx). Тема и realm Keycloak встраиваются в ConfigMap через `configMapGenerator` в корневом `kustomization.yaml`. Требуются DNS-записи `mint-box.ru`/`www.mint-box.ru` на внешний IP ноды и доступный порт 80.
 
 Планы на продакшен-кластер:
 
 1. WireGuard оставить как sidecar/Deployment (или перейти на Tailscale Kubernetes Operator / Cloud VPN).
 2. Vault перевести на K8s-хранилище (etcd/file) с auto-unseal через cloud KMS.
 3. Ресурсы K8s обрабатывать через Vault Agent Injector / external secrets.
-4. Публиковать через Ingress только nginx (`gross-view.local`); Postgres и внутренние API — только через WireGuard/VPN/ClusterIP.
+4. Публиковать через nginx LoadBalancer только 80/443 (`mint-box.ru`); Postgres и внутренние API — только через WireGuard/VPN/ClusterIP.
 
 ## Структура
 
 ```
 ├── docker-compose.yml
 ├── kustomization.yaml          # K8s: theme + realm ConfigMaps
-├── k8s/base/                   # K8s-манифесты (Namespace, Secrets, workload, Ingress)
+├── k8s/base/                   # K8s-манифесты (Namespace, Secrets, workload, nginx, certbot)
 ├── .env
 ├── dns/
 │   └── dnsmasq.conf

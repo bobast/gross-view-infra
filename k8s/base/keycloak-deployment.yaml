@@ -38,9 +38,9 @@ spec:
           env:
             # Hostname / proxy settings (matching nginx Ingress paths)
             - name: KC_HOSTNAME_URL
-              value: https://gross-view.local/sso
+              value: https://mint-box.ru/sso
             - name: KC_HOSTNAME_ADMIN_URL
-              value: https://gross-view.local/sso
+              value: https://mint-box.ru/sso
             - name: KC_HOSTNAME_STRICT
               value: "true"
             - name: KC_HOSTNAME_STRICT_HTTPS

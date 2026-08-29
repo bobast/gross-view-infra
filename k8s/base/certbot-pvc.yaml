@@ -1,0 +1,18 @@
+# certbot - PersistentVolumeClaim for the Let's Encrypt webroot (HTTP-01).
+# Shared between the nginx pod (serves challenge files) and the certbot
+# CronJob pod (writes them). ReadWriteOnce is fine on single-node clusters
+# (k3s); on multi-node clusters use a ReadWriteMany storage class instead.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: certbot-data
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: certbot
+    app.kubernetes.io/part-of: gross-view
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
