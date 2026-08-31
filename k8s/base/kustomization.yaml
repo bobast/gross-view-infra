@@ -32,7 +32,6 @@ resources:
   - certbot-pvc.yaml
   - certbot-rbac.yaml
   - certbot-cronjob.yaml
-  - tls-secret.yaml
   # ingress.yaml is intentionally NOT listed: the nginx Deployment + Service now
   # terminate TLS and are the entry point. Keep ingress.yaml for reference when
   # switching back to ingress-nginx (it would conflict on node ports 80/443).
