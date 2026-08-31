@@ -23,15 +23,15 @@ spec:
         app.kubernetes.io/name: vault
         app.kubernetes.io/part-of: gross-view
     spec:
-      securityContext:
-        # docker-compose used cap_add: IPC_LOCK for mlock; disable_mlock is set in
-        # vault.hcl so IPC_LOCK is not required, but keep the capability for parity.
-        capabilities:
-          add: ["IPC_LOCK"]
       containers:
         - name: vault
           image: hashicorp/vault:latest
           args: ["server", "-config=/vault/config/vault.hcl"]
+          securityContext:
+            # docker-compose used cap_add: IPC_LOCK for mlock; disable_mlock is set in
+            # vault.hcl so IPC_LOCK is not required, but keep the capability for parity.
+            capabilities:
+              add: ["IPC_LOCK"]
           env:
             - name: VAULT_ADDR
               value: http://0.0.0.0:8200

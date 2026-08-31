@@ -33,10 +33,6 @@ spec:
     spec:
       securityContext:
         runAsUser: 0
-        capabilities:
-          add:
-            - NET_ADMIN
-            - SYS_MODULE
         sysctls:
           - name: net.ipv4.conf.all.src_valid_mark
             value: "1"
@@ -45,6 +41,12 @@ spec:
       containers:
         - name: wireguard
           image: lscr.io/linuxserver/wireguard:latest
+          securityContext:
+            privileged: true
+            capabilities:
+              add:
+                - NET_ADMIN
+                - SYS_MODULE
           env:
             - name: PUID
               value: "1000"

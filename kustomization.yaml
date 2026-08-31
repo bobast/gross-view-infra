@@ -17,12 +17,12 @@ configMapGenerator:
   - name: keycloak-theme
     namespace: gross-view
     files:
-      - login/theme.properties=themes/gross-view/login/theme.properties
-      - login/messages/login.properties=themes/gross-view/login/messages/login.properties
-      - login/messages/login_en.properties=themes/gross-view/login/messages/login_en.properties
-      - login/messages/login_ru.properties=themes/gross-view/login/messages/login_ru.properties
-      - login/resources/css/login.css=themes/gross-view/login/resources/css/login.css
-      - login/resources/js/theme.js=themes/gross-view/login/resources/js/theme.js
+      - theme.properties=themes/gross-view/login/theme.properties
+      - login.properties=themes/gross-view/login/messages/login.properties
+      - login_en.properties=themes/gross-view/login/messages/login_en.properties
+      - login_ru.properties=themes/gross-view/login/messages/login_ru.properties
+      - login.css=themes/gross-view/login/resources/css/login.css
+      - theme.js=themes/gross-view/login/resources/js/theme.js
 
   # Keycloak realm import -> mounted at /opt/keycloak/data/import/gross-view-realm.json
   - name: keycloak-realm
