@@ -103,8 +103,8 @@ The test cluster runs on a single node: **1 CPU / 2 GB RAM / 30 GB NVMe**. All K
 | Service | CPU req/lim | Mem req/lim |
 |---------|-------------|-------------|
 | nginx | 50m / 100m | 32Mi / 64Mi |
-| postgres | 150m / 250m | 384Mi / 512Mi |
-| keycloak | 200m / 400m | 384Mi / 512Mi |
+| postgres | 150m / 200m | 384Mi / 384Mi |
+| keycloak | 200m / 250m | 384Mi / 384Mi |
 | n8n | 75m / 150m | 128Mi / 256Mi |
 | vault | 50m / 100m | 64Mi / 128Mi |
 | wireguard | 25m / 50m | 32Mi / 64Mi |

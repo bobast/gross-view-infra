@@ -10,29 +10,29 @@ resources:
   - namespace.yaml
   - storageclass.yaml
   - secret.yaml
-  - postgres-init-configmap.yaml
-  - postgres-service.yaml
-  - postgres-statefulset.yaml
-  - keycloak-deployment.yaml
-  - keycloak-service.yaml
+#  - postgres-init-configmap.yaml
+#  - postgres-service.yaml
+#  - postgres-statefulset.yaml
+#  - keycloak-deployment.yaml
+#  - keycloak-service.yaml
   - nginx-configmap.yaml
   - nginx-deployment.yaml
   - nginx-service.yaml
-  - n8n-deployment.yaml
-  - n8n-service.yaml
-  - n8n-pvc.yaml
-  - vault-configmap.yaml
-  - vault-service.yaml
-  - vault-statefulset.yaml
-  - wireguard-deployment.yaml
-  - wireguard-service.yaml
-  - wireguard-pvc.yaml
-  - dnsmasq-configmap.yaml
-  - dnsmasq-deployment.yaml
-  - dnsmasq-service.yaml
+#  - n8n-deployment.yaml
+#  - n8n-service.yaml
+#  - n8n-pvc.yaml
+#  - vault-configmap.yaml
+#  - vault-service.yaml
+#  - vault-statefulset.yaml
+#  - wireguard-deployment.yaml
+#  - wireguard-service.yaml
+#  - wireguard-pvc.yaml
+#  - dnsmasq-configmap.yaml
+#  - dnsmasq-deployment.yaml
+#  - dnsmasq-service.yaml
   - certbot-pvc.yaml
-  - certbot-rbac.yaml
-  - certbot-cronjob.yaml
+#  - certbot-rbac.yaml
+#  - certbot-cronjob.yaml
   # ingress.yaml is intentionally NOT listed: the nginx Deployment + Service now
   # terminate TLS and are the entry point. Keep ingress.yaml for reference when
   # switching back to ingress-nginx (it would conflict on node ports 80/443).
