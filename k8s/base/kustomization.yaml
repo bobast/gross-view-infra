@@ -8,6 +8,7 @@ namespace: gross-view
 
 resources:
   - namespace.yaml
+  - storageclass.yaml
   - secret.yaml
   - postgres-init-configmap.yaml
   - postgres-service.yaml

@@ -85,6 +85,17 @@ The `k8s/` directory mirrors the docker-compose stack for cloud/K8s. Both descri
 - Cluster-specific changes (StorageClass, replicas, WireGuard CIDRs) are applied by adding `patches` to the root `kustomization.yaml`. A nested `k8s/overlays` directory is NOT possible: kustomize forbids an overlay inside the repo root from including the root kustomization (cycle), and `configMapGenerator` cannot reach theme/realm files outside its own directory, so the root is the single build point.
 - The static `172.28.0.0/24` IPs in `dns/dnsmasq.conf` and WireGuard `PEERDNS`/`ALLOWEDIPS` are Docker-era and do NOT apply to K8s (dynamic pod IPs). In K8s prefer the cluster's CoreDNS (`<svc>.<ns>.svc.cluster.local`) and update WireGuard ALLOWEDIPS to the pod/service CIDR.
 
+## StatefulSet volumeClaimTemplates (immutable)
+
+- `volumeClaimTemplates` in a StatefulSet is **immutable** after creation. Changing it
+  (e.g. adding/removing `storageClassName`, size, accessModes) causes
+  `Forbidden: updates to statefulset spec ... are forbidden` on `kubectl apply -k`.
+- Postgres and vault StatefulSets deliberately do NOT set `storageClassName` so the
+  PVCs pick up the cluster's default StorageClass; do not re-add it. To force a
+  specific StorageClass on a fresh cluster, recreate the StatefulSet with
+  `kubectl delete statefulset <name> --cascade=orphan` (and its PVCs) first, or use
+  a kustomize patch only on a cluster where the StatefulSet has never been created.
+
 ## Available Skills
 
 Skills provide specialized instructions and workflows for specific tasks.
