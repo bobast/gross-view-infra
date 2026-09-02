@@ -96,6 +96,20 @@ The `k8s/` directory mirrors the docker-compose stack for cloud/K8s. Both descri
   `kubectl delete statefulset <name> --cascade=orphan` (and its PVCs) first, or use
   a kustomize patch only on a cluster where the StatefulSet has never been created.
 
+## Test cluster resource sizing
+
+The test cluster runs on a single node: **1 CPU / 2 GB RAM / 30 GB NVMe**. All K8s manifests set CPU and memory **requests and limits** to fit within this budget. Total requests are ~560m CPU / ~1040Mi RAM, leaving headroom for system overhead (kubelet, OS, container runtime). When adding or modifying containers, verify the sum of all requests does not exceed ~800m CPU / ~1500Mi RAM to keep the scheduler happy.
+
+| Service | CPU req/lim | Mem req/lim |
+|---------|-------------|-------------|
+| nginx | 50m / 100m | 32Mi / 64Mi |
+| postgres | 150m / 250m | 384Mi / 512Mi |
+| keycloak | 200m / 400m | 384Mi / 512Mi |
+| n8n | 75m / 150m | 128Mi / 256Mi |
+| vault | 50m / 100m | 64Mi / 128Mi |
+| wireguard | 25m / 50m | 32Mi / 64Mi |
+| dnsmasq | 10m / 25m | 16Mi / 32Mi |
+
 ## Available Skills
 
 Skills provide specialized instructions and workflows for specific tasks.
