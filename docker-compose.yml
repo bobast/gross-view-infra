@@ -2,6 +2,8 @@ services:
   postgres:
     image: timescale/timescaledb:2.17.2-pg16
     command: postgres -c shared_preload_libraries=timescaledb
+    ports:
+      - 5432:5432
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
@@ -46,6 +48,8 @@ services:
       KC_DB_URL: jdbc:postgresql://postgres/${KC_DB_NAME}
       KC_DB_USERNAME: ${KC_DB_USER}
       KC_DB_PASSWORD: ${KC_DB_PSWD}
+    ports:
+      - 8080:8080
     restart: always
     volumes:
       - ./themes:/opt/keycloak/themes
@@ -93,60 +97,6 @@ services:
     networks:
       keycloak_network:
         ipv4_address: 172.28.0.5
-
-  wireguard:
-    image: lscr.io/linuxserver/wireguard:latest
-    container_name: wireguard
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    environment:
-      - PUID=${PUID:-1000}
-      - PGID=${PGID:-1000}
-      - TZ=${GENERIC_TIMEZONE}
-      - SERVERURL=${WG_SERVERURL:-auto}
-      - SERVERPORT=51820
-      - PEERS=${WG_PEERS:-5}
-      - PEERDNS=${WG_PEERDNS:-172.28.0.8}
-      - INTERNAL_SUBNET=${WG_INTERNAL_SUBNET:-10.13.13.0}
-      - ALLOWEDIPS=172.28.0.0/24,10.13.13.1
-      - PERSISTENTKEEPALIVE_PEERS=all
-      - LOG_CONFS=true
-    ports:
-      - 51820:51820/udp
-    volumes:
-      - wireguard_config:/config
-      - /lib/modules:/lib/modules
-    sysctls:
-      - net.ipv4.conf.all.src_valid_mark=1
-    networks:
-      keycloak_network:
-        ipv4_address: 172.28.0.6
-    restart: always
-
-  vault:
-    image: hashicorp/vault:latest
-    environment:
-      - VAULT_ADDR=http://0.0.0.0:8200
-    cap_add:
-      - IPC_LOCK
-    volumes:
-      - vault_data:/vault/data
-      - ./vault/config:/vault/config
-    command: vault server -config=/vault/config/vault.hcl
-    networks:
-      keycloak_network:
-        ipv4_address: 172.28.0.7
-    restart: always
-
-  dns:
-    image: jpillora/dnsmasq:latest
-    volumes:
-      - ./dns/dnsmasq.conf:/etc/dnsmasq.conf:ro
-    networks:
-      keycloak_network:
-        ipv4_address: 172.28.0.8
-    restart: always
 
 volumes:
   postgres_data:
