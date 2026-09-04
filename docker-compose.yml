@@ -17,9 +17,6 @@ services:
       GV_DB_NAME: ${GV_DB_NAME}
       GV_DB_USER: ${GV_DB_USER}
       GV_DB_PSWD: ${GV_DB_PSWD}
-      N8N_DB_NAME: ${N8N_DB_NAME}
-      N8N_DB_USER: ${N8N_DB_USER}
-      N8N_DB_PSWD: ${N8N_DB_PSWD}
     networks:
       keycloak_network:
         ipv4_address: 172.28.0.2
@@ -76,23 +73,17 @@ services:
     extra_hosts:
       - host.docker.internal:host-gateway
 
-  n8n:
-    image: docker.n8n.io/n8nio/n8n
+  opencode:
+    image: ghcr.io/anomalyco/opencode:latest
+    command: web --port 4096 --hostname 0.0.0.0
     environment:
-      DB_TYPE: postgresdb
-      DB_POSTGRESDB_HOST: postgres
-      DB_POSTGRESDB_PORT: 5432
-      DB_POSTGRESDB_DATABASE: ${N8N_DB_NAME}
-      DB_POSTGRESDB_USER: ${N8N_DB_USER}
-      DB_POSTGRESDB_PASSWORD: ${N8N_DB_PSWD}
-      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
-      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE}
-      N8N_DIAGNOSTICS_ENABLED: false
+      OPENCODE_SERVER_PASSWORD: ${OPENCODE_PASSWORD}
+      BROWSER: "none"
+#      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
     volumes:
-      - n8n_data:/home/node/.n8n
-    depends_on:
-      postgres:
-        condition: service_healthy
+      - opencode_data:/root/.config/opencode
+    ports:
+      - "4096:4096"
     restart: always
     networks:
       keycloak_network:
@@ -101,7 +92,7 @@ services:
 volumes:
   postgres_data:
     driver: local
-  n8n_data:
+  opencode_data:
     driver: local
   wireguard_config:
     driver: local

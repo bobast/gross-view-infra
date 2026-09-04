@@ -1,15 +1,15 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: n8n
+  name: opencode
   namespace: gross-view
   labels:
-    app.kubernetes.io/name: n8n
+    app.kubernetes.io/name: opencode
     app.kubernetes.io/part-of: gross-view
 spec:
   selector:
-    app.kubernetes.io/name: n8n
+    app.kubernetes.io/name: opencode
   ports:
     - name: http
-      port: 5678
+      port: 4096
       targetPort: http

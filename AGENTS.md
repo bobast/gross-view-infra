@@ -9,7 +9,7 @@ This repository manages **infrastructure configuration** for the "gross-view" pr
 ## Repository Structure
 
 - `gross-view-realm.json` — Keycloak realm configuration (exported/imported)
-- `docker-compose.yml` — Docker Compose stack: PostgreSQL, Keycloak, Nginx, n8n, WireGuard, Vault, dnsmasq
+- `docker-compose.yml` — Docker Compose stack: PostgreSQL, Keycloak, Nginx, opencode, WireGuard, Vault, dnsmasq
 - `kustomization.yaml` — Root Kustomize build generating Keycloak theme + realm ConfigMaps (apply with `kubectl apply -k .`)
 - `k8s/` — Kubernetes manifests (alternative to docker-compose for cloud/K8s deployment)
   - `k8s/base/` — Namespace, Secrets, and per-service Deployments/StatefulSets/Services/ConfigMaps (nginx + certbot included; Ingress kept for reference only)
@@ -24,14 +24,14 @@ This repository manages **infrastructure configuration** for the "gross-view" pr
 
 ## Purpose
 
-This repo manages reverse proxy routing, Keycloak theme customizations, realm settings, VPN access, secrets storage, internal DNS, and multi-container orchestration. Nginx provides unified entry point routing `/sso` to Keycloak, `/api` to backend, and `/` to frontend. WireGuard serves as the secure VPN channel to non-public services (Postgres, Keycloak admin, n8n); Vault stores the stack's credentials (used when migrating to cloud K8s).
+This repo manages reverse proxy routing, Keycloak theme customizations, realm settings, VPN access, secrets storage, internal DNS, and multi-container orchestration. Nginx provides unified entry point routing `/sso` to Keycloak, `/api` to backend, and `/` to frontend. WireGuard serves as the secure VPN channel to non-public services (Postgres, Keycloak admin, opencode); Vault stores the stack's credentials (used when migrating to cloud K8s).
 
 ## Infrastructure Services
 
 ### Static network
 
 - `keycloak_network` uses subnet `172.28.0.0/24` (bridge). Every service has a fixed IP — do not change without updating `dns/dnsmasq.conf`.
-- IP map: postgres `172.28.0.2`, keycloak `172.28.0.3`, nginx `172.28.0.4`, n8n `172.28.0.5`, wireguard `172.28.0.6`, vault `172.28.0.7`, dns `172.28.0.8`.
+- IP map: postgres `172.28.0.2`, keycloak `172.28.0.3`, nginx `172.28.0.4`, opencode `172.28.0.5`, wireguard `172.28.0.6`, vault `172.28.0.7`, dns `172.28.0.8`.
 - `172.20.x`, `172.19.x`, `172.18.x` are taken by the host/WSL and other Docker networks — avoid them.
 
 ### WireGuard (VPN)
@@ -47,7 +47,7 @@ This repo manages reverse proxy routing, Keycloak theme customizations, realm se
 
 - Uses file storage (`/vault/data`), mlock disabled, TLS disabled (dev). After any restart the container is **sealed** — manual `vault operator unseal <UNSEAL_KEY>` is required.
 - Unseal key and root token are generated on first `vault operator init` and must be kept outside the repo (they are NOT in `.env`).
-- Secret paths currently populated: `secret/postgres`, `secret/keycloak`, `secret/n8n`, `secret/gross-view` (KV v2 engine).
+- Secret paths currently populated: `secret/postgres`, `secret/keycloak`, `secret/opencode`, `secret/gross-view` (KV v2 engine).
 
 ### DNS (dnsmasq)
 
@@ -76,7 +76,7 @@ The `k8s/` directory mirrors the docker-compose stack for cloud/K8s. Both descri
   - keycloak → `k8s/base/keycloak-deployment.yaml` (Deployment + `Service`, mounts generated `keycloak-theme` / `keycloak-realm` ConfigMaps). The theme ConfigMap is flat (keys without `/`); each theme file is mounted with `subPath` to its nested path under `/opt/keycloak/themes/login/...` (ConfigMap data keys cannot contain `/`). Keep the root `kustomization.yaml` configMapGenerator file keys (`theme.properties`, `login.properties`, `login_en.properties`, `login_ru.properties`, `login.css`, `theme.js`) and the keycloak-deployment subPath mounts in sync when adding theme files.
   - nginx → `k8s/base/nginx-deployment.yaml` (+ `nginx-configmap.yaml`, `nginx-service.yaml`) — Deployment + LoadBalancer `Service` (80/443), the TLS-terminating entry point; config mirrors `nginx/gross-view.local.conf` for production domain `mint-box.ru`. `k8s/base/ingress.yaml` exists for reference but is NOT in the kustomize build (would conflict on node ports 80/443)
   - certbot → `k8s/base/certbot-cronjob.yaml` (+ `certbot-pvc.yaml`, `certbot-rbac.yaml`) — daily CronJob issuing/renewing the Let's Encrypt cert for `mint-box.ru` via HTTP-01 (webroot on the `certbot-data` PVC shared with nginx). On renewal it writes the `mint-box-tls` Secret and rolls the nginx Deployment
-  - n8n → `k8s/base/n8n-deployment.yaml` (Deployment + `Service` + `n8n-data` PVC)
+  - opencode → `k8s/base/opencode-deployment.yaml` (Deployment + `Service` + `opencode-data` PVC). Uses `ghcr.io/anomalyco/opencode` in web mode; file-based storage (no DB). Requires `OPENCODE_SERVER_PASSWORD` and `ANTHROPIC_API_KEY` secrets. `BROWSER=none` disables the headless `xdg-open` error on startup.
   - vault → `k8s/base/vault-statefulset.yaml` (StatefulSet + `Service` + `volumeClaimTemplates`, `vault-config` ConfigMap with vault.hcl). Capabilities (`IPC_LOCK`), like WireGuard's `NET_ADMIN`/`SYS_MODULE`, live in the **container** `securityContext` (`spec.template.spec.containers[].securityContext`), not the pod-level one — `capabilities` is not a valid pod-securityContext field.
   - wireguard → `k8s/base/wireguard-deployment.yaml` (Deployment + LoadBalancer `Service` UDP 51820, privileged + NET_ADMIN/SYS_MODULE)
   - dns → `k8s/base/dnsmasq-deployment.yaml` (Deployment + `Service` 53/tcp+udp, `dnsmasq-config` ConfigMap)
@@ -105,7 +105,7 @@ The test cluster runs on a single node: **1 CPU / 2 GB RAM / 30 GB NVMe**. All K
 | nginx | 50m / 100m | 32Mi / 64Mi |
 | postgres | 150m / 200m | 384Mi / 384Mi |
 | keycloak | 200m / 250m | 384Mi / 384Mi |
-| n8n | 75m / 150m | 128Mi / 256Mi |
+| opencode | 75m / 150m | 128Mi / 256Mi |
 | vault | 50m / 100m | 64Mi / 128Mi |
 | wireguard | 25m / 50m | 32Mi / 64Mi |
 | dnsmasq | 10m / 25m | 16Mi / 32Mi |

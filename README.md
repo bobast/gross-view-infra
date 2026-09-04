@@ -2,7 +2,7 @@
 
 ## Инфраструктура gross-view
 
-Docker Compose стек для gross-view: PostgreSQL (TimescaleDB), Keycloak, Nginx, n8n, плюс сервисы инфраструктуры — Tailscale (VPN), Vault (секреты), DNS (dnsmasq).
+Docker Compose стек для gross-view: PostgreSQL (TimescaleDB), Keycloak, Nginx, opencode, плюс сервисы инфраструктуры — Tailscale (VPN), Vault (секреты), DNS (dnsmasq).
 
 ## Быстрый старт
 
@@ -18,7 +18,7 @@ docker-compose up -d
 | postgres   | 172.28.0.2    | - (internal)   | Основная БД (TimescaleDB)                  |
 | keycloak   | 172.28.0.3    | - (internal)   | SSO / Identity Provider                   |
 | nginx      | 172.28.0.4    | 80, 443        | Reverse proxy (входная точка /sso, /api, /)|
-| n8n        | 172.28.0.5    | - (internal)   | Workflow automation                       |
+| opencode   | 172.28.0.5    | 4096           | AI coding agent (web UI)                  |
 | wireguard  | 172.28.0.6    | 51820 (udp)    | VPN-доступ к внутренним сервисам          |
 | vault      | 172.28.0.7    | 8200           | Хранилище секретов                        |
 | dns        | 172.28.0.8    | 53 (tcp/udp)   | Внутренний DNS (dnsmasq)                  |
@@ -27,7 +27,7 @@ docker-compose up -d
 
 ## WireGuard (VPN)
 
-Обеспечивает безопасный доступ к внутренним сервисам (Postgres, Keycloak admin, n8n) без их публикации наружу. Используется [linuxserver/wireguard](https://docs.linuxserver.io/images/docker-wireguard/) в режиме сервера.
+Обеспечивает безопасный доступ к внутренним сервисам (Postgres, Keycloak admin, opencode) без их публикации наружу. Используется [linuxserver/wireguard](https://docs.linuxserver.io/images/docker-wireguard/) в режиме сервера.
 
 ### Настройка
 
@@ -48,7 +48,7 @@ docker-compose up -d
 
 - `postgres` — 172.28.0.2:5432
 - `keycloak` — 172.28.0.3:8080
-- `n8n` — 172.28.0.5:5678
+- `opencode` — 172.28.0.5:4096
 - `vault` — 172.28.0.7:8200
 
 В качестве DNS клиентам отдаётся внутренний dnsmasq (`172.28.0.8`), поэтому `*.local` имена (`postgres.local`, `auth.local`, ...) также резолвятся.
@@ -92,8 +92,8 @@ docker exec -it gross-view-infra-vault-1 vault kv put secret/postgres \
 docker exec -it gross-view-infra-vault-1 vault kv put secret/keycloak \
   admin="$KEYCLOAK_ADMIN" admin_password="$KEYCLOAK_ADMIN_PASSWORD"
 
-docker exec -it gross-view-infra-vault-1 vault kv put secret/n8n \
-  db_user="$N8N_DB_USER" db_password="$N8N_DB_PSWD" encryption_key="$N8N_ENCRYPTION_KEY"
+docker exec -it gross-view-infra-vault-1 vault kv put secret/opencode \
+  password="$OPENCODE_PASSWORD" anthropic_api_key="$ANTHROPIC_API_KEY"
 
 docker exec -it gross-view-infra-vault-1 vault kv put secret/gross-view \
   db_user="$GV_DB_USER" db_password="$GV_DB_PSWD"
@@ -106,7 +106,7 @@ UI: http://localhost:8200/ui (в dev-режиме TLS отключён).
 Добавляет в общий сетевой контур:
 
 - SRV-записи для сервисов: `*.local` (например `postgres.local` → `172.28.0.2`)
-- Алиасы: `db.local`, `auth.local`, `workflow.local`, `secrets.local`, `vpn.local`
+- Алиасы: `db.local`, `auth.local`, `code.local`, `secrets.local`, `vpn.local`
 - Кэширование внешних запросов (8.8.8.8 / 8.8.4.4)
 
 Конфигурация: `dns/dnsmasq.conf`. Чтобы использовать DNS другими клиентами, укажите им `nameserver 172.28.0.8`.
@@ -131,11 +131,8 @@ GV_DB_PSWD=
 KEYCLOAK_ADMIN=
 KEYCLOAK_ADMIN_PASSWORD=
 
-N8N_DB_NAME=
-N8N_DB_USER=
-N8N_DB_PSWD=
-N8N_ENCRYPTION_KEY=
-GENERIC_TIMEZONE=
+OPENCODE_PASSWORD=
+ANTHROPIC_API_KEY=
 
 WG_SERVERURL=auto
 WG_PEERS=5
@@ -161,7 +158,7 @@ kubectl create job --from=cronjob/certbot certbot-bootstrap -n gross-view
 kubectl logs job/certbot-bootstrap -n gross-view
 ```
 
-Соответствие сервисов: postgres → StatefulSet, keycloak → Deployment, nginx → Deployment + LoadBalancer (80/443, TLS-терминация для mint-box.ru), n8n → Deployment, vault → StatefulSet, wireguard → Deployment + LoadBalancer, dns → Deployment, certbot → CronJob (Let's Encrypt, HTTP-01/webroot, ежедневное обновление → Secret `mint-box-tls` + рестарт nginx). Тема и realm Keycloak встраиваются в ConfigMap через `configMapGenerator` в корневом `kustomization.yaml`. Требуются DNS-записи `mint-box.ru`/`www.mint-box.ru` на внешний IP ноды и доступный порт 80.
+Соответствие сервисов: postgres → StatefulSet, keycloak → Deployment, nginx → Deployment + LoadBalancer (80/443, TLS-терминация для mint-box.ru), opencode → Deployment, vault → StatefulSet, wireguard → Deployment + LoadBalancer, dns → Deployment, certbot → CronJob (Let's Encrypt, HTTP-01/webroot, ежедневное обновление → Secret `mint-box-tls` + рестарт nginx). Тема и realm Keycloak встраиваются в ConfigMap через `configMapGenerator` в корневом `kustomization.yaml`. Требуются DNS-записи `mint-box.ru`/`www.mint-box.ru` на внешний IP ноды и доступный порт 80.
 
 Планы на продакшен-кластер:
 

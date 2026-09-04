@@ -18,9 +18,9 @@ resources:
   - nginx-configmap.yaml
   - nginx-deployment.yaml
   - nginx-service.yaml
-#  - n8n-deployment.yaml
-#  - n8n-service.yaml
-#  - n8n-pvc.yaml
+#  - opencode-deployment.yaml
+#  - opencode-service.yaml
+#  - opencode-pvc.yaml
 #  - vault-configmap.yaml
 #  - vault-service.yaml
 #  - vault-statefulset.yaml

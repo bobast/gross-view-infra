@@ -1,10 +1,10 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: n8n-data
+  name: opencode-data
   namespace: gross-view
   labels:
-    app.kubernetes.io/name: n8n
+    app.kubernetes.io/name: opencode
     app.kubernetes.io/part-of: gross-view
 spec:
   accessModes:
