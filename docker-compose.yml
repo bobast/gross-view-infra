@@ -77,9 +77,8 @@ services:
     image: ghcr.io/anomalyco/opencode:latest
     command: web --port 4096 --hostname 0.0.0.0
     environment:
-      OPENCODE_SERVER_PASSWORD: ${OPENCODE_PASSWORD}
       BROWSER: "none"
-#      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
     volumes:
       - opencode_data:/root/.config/opencode
     ports:

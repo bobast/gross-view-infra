@@ -25,10 +25,8 @@ spec:
           image: ghcr.io/anomalyco/opencode:latest
           command: ["web", "--port", "4096", "--hostname", "0.0.0.0"]
           env:
-            - name: OPENCODE_SERVER_PASSWORD
-              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: opencode_password } }
-            - name: ANTHROPIC_API_KEY
-              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: anthropic_api_key } }
+            - name: DEEPSEEK_API_KEY
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: deepseek_api_key } }
             - name: BROWSER
               value: "none"
           ports:

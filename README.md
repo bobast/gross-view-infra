@@ -93,7 +93,7 @@ docker exec -it gross-view-infra-vault-1 vault kv put secret/keycloak \
   admin="$KEYCLOAK_ADMIN" admin_password="$KEYCLOAK_ADMIN_PASSWORD"
 
 docker exec -it gross-view-infra-vault-1 vault kv put secret/opencode \
-  password="$OPENCODE_PASSWORD" anthropic_api_key="$ANTHROPIC_API_KEY"
+  deepseek_api_key="$DEEPSEEK_API_KEY"
 
 docker exec -it gross-view-infra-vault-1 vault kv put secret/gross-view \
   db_user="$GV_DB_USER" db_password="$GV_DB_PSWD"
@@ -131,8 +131,7 @@ GV_DB_PSWD=
 KEYCLOAK_ADMIN=
 KEYCLOAK_ADMIN_PASSWORD=
 
-OPENCODE_PASSWORD=
-ANTHROPIC_API_KEY=
+DEEPSEEK_API_KEY=
 
 WG_SERVERURL=auto
 WG_PEERS=5
