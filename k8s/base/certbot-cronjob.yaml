@@ -9,7 +9,7 @@
 #   kubectl create job --from=cronjob/certbot certbot-bootstrap -n gross-view
 # or pre-create the Secret manually.
 # Replace admin@mint-box.ru with a real contact email. Requires DNS for
-# mint-box.ru/www.mint-box.ru to point at the node/LB and inbound port 80.
+# mint-box.ru to point at the node/LB and inbound port 80.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -29,7 +29,7 @@ spec:
           serviceAccountName: certbot
           initContainers:
             - name: kubectl-provider
-              image: dockerhub.timeweb.cloud/lachlanevenson/k8s-kubectl:v1.28.4
+              image: dockerhub.timeweb.cloud/lachlanevenson/k8s-kubectl:latest
               command:
                 - sh
                 - -c
@@ -57,7 +57,7 @@ spec:
                   chmod +x /tools/apply-cert.sh
                   if [ ! -d /etc/letsencrypt/live/mint-box.ru ]; then
                     certbot certonly --webroot -w /var/www/certbot \
-                      -d mint-box.ru -d www.mint-box.ru \
+                      -d mint-box.ru \
                       --non-interactive --agree-tos --email admin@mint-box.ru \
                       --deploy-hook /tools/apply-cert.sh
                   else

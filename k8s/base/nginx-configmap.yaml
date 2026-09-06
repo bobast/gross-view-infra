@@ -17,7 +17,7 @@ data:
   mint-box.conf: |
     server {
         listen 80;
-        server_name mint-box.ru www.mint-box.ru;
+        server_name mint-box.ru;
 
         location = /healthz {
             return 200;
@@ -41,7 +41,7 @@ data:
     server {
         listen 443 ssl;
         http2 on;
-        server_name mint-box.ru www.mint-box.ru;
+        server_name mint-box.ru;
 
         ssl_certificate     /etc/nginx/certs/tls.crt;
         ssl_certificate_key /etc/nginx/certs/tls.key;
