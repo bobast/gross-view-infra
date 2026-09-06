@@ -56,9 +56,9 @@ data:
         # even if a backend Service is not deployed yet (static proxy_pass would
         # abort startup with `[emerg] host not found in upstream`).
         resolver kube-dns.kube-system.svc.cluster.local valid=30s ipv6=off;
-        set $keycloak_upstream http://keycloak:8080;
-        set $gv_api_upstream http://gross-view-api:8082;
-        set $gv_ui_upstream http://gross-view-ui:5173;
+        set $keycloak_upstream http://keycloak.gross-view.svc.cluster.local:8080;
+        set $gv_api_upstream http://gross-view-api.gross-view.svc.cluster.local:8082;
+        set $gv_ui_upstream http://gross-view-ui.gross-view.svc.cluster.local:5173;
 
         # Keycloak SSO
         location /sso/ {

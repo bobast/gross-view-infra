@@ -13,8 +13,8 @@ resources:
   - postgres-init-configmap.yaml
   - postgres-service.yaml
   - postgres-statefulset.yaml
-#  - keycloak-deployment.yaml
-#  - keycloak-service.yaml
+  - keycloak-deployment.yaml
+  - keycloak-service.yaml
   - nginx-configmap.yaml
   - nginx-deployment.yaml
   - nginx-service.yaml
