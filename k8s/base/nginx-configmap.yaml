@@ -27,8 +27,14 @@ data:
             root /var/www/certbot;
         }
 
+        # Timeweb LoadBalancer health-checks the backend with HTTP GET / and
+        # requires a 2xx (the / path is not configurable via annotations). A
+        # bare `return 301` marks the backend DOWN -> balancer drops traffic.
+        # Return 200 with a meta-refresh redirect so browsers still get pushed
+        # to HTTPS while the health check passes.
         location / {
-            return 301 https://$host$request_uri;
+            default_type text/html;
+            return 200 '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0; url=https://$host$request_uri"></head><body>Redirecting to <a href="https://$host$request_uri">https://$host$request_uri</a>...</body></html>';
         }
     }
 

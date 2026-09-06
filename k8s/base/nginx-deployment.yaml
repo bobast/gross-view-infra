@@ -29,6 +29,11 @@ spec:
           ports:
             - name: http
               containerPort: 80
+              # The Timeweb LoadBalancer health-checks the backend node on
+              # 192.168.132.5:80 (HTTP GET /, not the NodePort) and drops the
+              # backend if it gets a non-2xx/RST. hostPort makes node:80 reach
+              # nginx, whose `location /` returns 200 for the health check.
+              hostPort: 80
             - name: https
               containerPort: 443
           volumeMounts:

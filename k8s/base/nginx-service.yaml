@@ -1,8 +1,15 @@
 # nginx - Service (entry point of the whole stack).
 # Port 80: http-to-https redirect + ACME HTTP-01 challenges.
 # Port 443: TLS terminated by nginx (upstream of this repo's routing).
-# On k3s the built-in klipper LoadBalancer assigns the node IP; on other
-# clusters adjust the type (ClusterIP + external LB / NodePort) as needed.
+#
+# On Timeweb Cloud managed Kubernetes a LoadBalancer Service creates a Timeweb
+# balancer device with a public IP. The controller (`k8s.timeweb.cloud`) builds
+# one backend rule per Service port and REQUIRES `appProtocol` + `name` on every
+# port to create the rules (a Service without appProtocol only gets a single
+# rule for the first port). We use TCP passthrough (`proto-tcp`) so nginx keeps
+# terminating TLS and serving the ACME challenges itself; the balancer does NOT
+# terminate TLS.
+# See https://timeweb.cloud/docs/k8s/network/kubernetes-load-balancer
 apiVersion: v1
 kind: Service
 metadata:
@@ -18,7 +25,11 @@ spec:
   ports:
     - name: http
       port: 80
+      nodePort: 30571
       targetPort: http
+      appProtocol: k8s.timeweb.cloud/proto-tcp
     - name: https
       port: 443
+      nodePort: 30868
       targetPort: https
+      appProtocol: k8s.timeweb.cloud/proto-tcp
