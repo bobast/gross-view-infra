@@ -10,9 +10,9 @@ resources:
   - namespace.yaml
   - storageclass.yaml
   - secret.yaml
-#  - postgres-init-configmap.yaml
-#  - postgres-service.yaml
-#  - postgres-statefulset.yaml
+  - postgres-init-configmap.yaml
+  - postgres-service.yaml
+  - postgres-statefulset.yaml
 #  - keycloak-deployment.yaml
 #  - keycloak-service.yaml
   - nginx-configmap.yaml
