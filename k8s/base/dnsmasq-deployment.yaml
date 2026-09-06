@@ -1,5 +1,5 @@
 # dnsmasq - Deployment
-# Mirrors docker-compose dns service (jpillora/dnsmasq, mounts ./dns/dnsmasq.conf).
+# Mirrors docker-compose dns service (dockerhub.timeweb.cloud/jpillora/dnsmasq, mounts ./dns/dnsmasq.conf).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
         - name: dnsmasq
-          image: jpillora/dnsmasq:latest
+          image: dockerhub.timeweb.cloud/jpillora/dnsmasq:latest
           ports:
             - name: dns-tcp
               containerPort: 53

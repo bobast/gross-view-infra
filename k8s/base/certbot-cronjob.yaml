@@ -29,7 +29,7 @@ spec:
           serviceAccountName: certbot
           initContainers:
             - name: kubectl-provider
-              image: lachlanevenson/k8s-kubectl:v1.28.4
+              image: dockerhub.timeweb.cloud/lachlanevenson/k8s-kubectl:v1.28.4
               command:
                 - sh
                 - -c
@@ -39,7 +39,7 @@ spec:
                   mountPath: /tools
           containers:
             - name: certbot
-              image: certbot/certbot:v2.7.4
+              image: dockerhub.timeweb.cloud/certbot/certbot:v2.7.4
               command: ["/bin/sh", "-c"]
               args:
                 - |

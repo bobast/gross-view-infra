@@ -1,6 +1,6 @@
 # Vault - StatefulSet
 # Mirrors docker-compose vault service:
-#   image: hashicorp/vault:latest, IPC_LOCK cap
+#   image: dockerhub.timeweb.cloud/hashicorp/vault:latest, IPC_LOCK cap
 #   volumes: vault_data -> /vault/data, ./vault/config -> /vault/config
 #   command: vault server -config=/vault/config/vault.hcl
 apiVersion: apps/v1
@@ -25,7 +25,7 @@ spec:
     spec:
       containers:
         - name: vault
-          image: hashicorp/vault:latest
+          image: dockerhub.timeweb.cloud/hashicorp/vault:latest
           args: ["server", "-config=/vault/config/vault.hcl"]
           securityContext:
             # docker-compose used cap_add: IPC_LOCK for mlock; disable_mlock is set in
