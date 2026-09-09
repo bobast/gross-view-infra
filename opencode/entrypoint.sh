@@ -1,31 +1,128 @@
 #!/bin/sh
 set -e
 
-# opencode entrypoint (docker-compose).
+# opencode entrypoint (docker-compose / k8s).
 # Registers the gross-view MCP server for the deployed agent by rendering
-# /root/.config/opencode/opencode.json from env:
-#   OPENCODE_MCP_URL   - gross-view handler MCP address (default http://host.docker.internal:8082/api/mcp)
-#   OPENCODE_MCP_TOKEN - service-account bearer token (see scripts/get-opencode-mcp-token.ps1).
-# If no token is set the MCP server is NOT registered (stale config is removed).
+# /root/.config/opencode/opencode.json.
+#
+# Token auto-generation (maximum automation):
+#   If OPENCODE_MCP_TOKEN is empty but Keycloak client credentials are
+#   available, a client_credentials token is obtained automatically.
+#
+# Environment variables:
+#   OPENCODE_MCP_TOKEN         - pre-set bearer token (highest priority)
+#   OPENCODE_MCP_URL           - handler MCP endpoint (default http://host.docker.internal:8082/api/mcp)
+#   OPENCODE_AGENT_CLIENT_ID   - Keycloak client (default opencode-agent)
+#   OPENCODE_AGENT_CLIENT_SECRET - Keycloak client secret (required for auto-generation)
+#   OPENCODE_TOKEN_MAX_ATTEMPTS   - token acquisition attempts (default 5, 2s apart)
+#   KEYCLOAK_INTERNAL_URL      - internal (in-network, plain HTTP) Keycloak base URL,
+#                                preferred for token requests (docker: http://keycloak:8080;
+#                                k8s: http://keycloak.gross-view.svc.cluster.local:8080)
+#   KEYCLOAK_URL               - public Keycloak base URL (fallback if internal unset)
+#
+# If none of the above produces a valid token the MCP server is NOT registered.
+#
+# Uses busybox wget (the opencode base image has no curl). Detect curl first,
+# fall back to wget for broader compatibility.
 
 CONFIG_DIR=/root/.config/opencode
-if [ -n "${OPENCODE_MCP_TOKEN:-}" ]; then
+CONFIG_FILE="$CONFIG_DIR/opencode.json"
+MCP_URL="${OPENCODE_MCP_URL:-http://host.docker.internal:8082/api/mcp}"
+CLIENT_ID="${OPENCODE_AGENT_CLIENT_ID:-opencode-agent}"
+KEYCLOAK_BASE="${KEYCLOAK_INTERNAL_URL:-${KEYCLOAK_URL:-https://gross-view.local/sso}}"
+TOKEN_URI="$KEYCLOAK_BASE/realms/gross-view-realm/protocol/openid-connect/token"
+
+# ---------------------------------------------------------------------------
+# Token acquisition (resilient)
+# ---------------------------------------------------------------------------
+# On transient failures the acquisition is retried OPENCODE_TOKEN_MAX_ATTEMPTS
+# times (default 5). The failure reason is always logged. A previously working
+# opencode.json is NEVER deleted on failure — a transient Keycloak hiccup must
+# not silently disable gross-view MCP (that produced the recurring
+# "MCP-серверы не обнаружены" outages). If the retained token has expired, the
+# server still starts and opencode reports the per-server error via GET /mcp,
+# which is diagnosable.
+TOKEN="${OPENCODE_MCP_TOKEN:-}"
+
+if [ -z "$TOKEN" ] && [ -n "${OPENCODE_AGENT_CLIENT_SECRET:-}" ]; then
+  BODY="grant_type=client_credentials&client_id=$CLIENT_ID&client_secret=$OPENCODE_AGENT_CLIENT_SECRET"
+  MAX_ATTEMPTS="${OPENCODE_TOKEN_MAX_ATTEMPTS:-5}"
+  ATTEMPT=0
+
+  while [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ] && [ -z "$TOKEN" ]; do
+    ATTEMPT=$((ATTEMPT + 1))
+    if [ "$ATTEMPT" -eq 1 ]; then
+      echo "==> OPENCODE_MCP_TOKEN not set; obtaining token from Keycloak ($TOKEN_URI) ..."
+    fi
+
+    RESP=""
+    if command -v curl >/dev/null 2>&1; then
+      RESP=$(curl -sS --max-time 10 -X POST "$TOKEN_URI" \
+        -H "Content-Type: application/x-www-form-urlencoded" -d "$BODY" 2>&1) || true
+    elif command -v wget >/dev/null 2>&1; then
+      RESP=$(wget -q -O - -T 10 \
+        --header "Content-Type: application/x-www-form-urlencoded" \
+        --post-data "$BODY" \
+        "$TOKEN_URI" 2>&1) || true
+    else
+      echo "ERROR: neither curl nor wget found in image; cannot auto-generate token."
+      break
+    fi
+
+    # Extract access_token — works without jq. Collapse whitespace/newlines so the
+    # key and value are on one logical line, then grab the value.
+    TOKEN=$(echo "$RESP" \
+      | tr -d ' \t\n\r' \
+      | grep '"access_token"' \
+      | sed 's/.*"access_token":"\([^"]*\)".*/\1/')
+
+    if [ -n "$TOKEN" ] && [ "$(echo "$TOKEN" | cut -c1-3)" = "eyJ" ]; then
+      echo "==> Token obtained successfully (length=$(echo "$TOKEN" | wc -c), attempt=$ATTEMPT)"
+      break
+    fi
+
+    if [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; then
+      echo "WARN: attempt $ATTEMPT/$MAX_ATTEMPTS failed to obtain token; retrying in 2s..."
+    else
+      echo "WARNING: Could not obtain token from Keycloak after $MAX_ATTEMPTS attempts."
+      echo "         Endpoint: $TOKEN_URI"
+      echo "         Response: $(echo "$RESP" | tr '\n' ' ' | cut -c1-300)"
+      echo "         gross-view MCP will NOT be (re)registered."
+    fi
+    sleep 2
+  done
+fi
+
+# ---------------------------------------------------------------------------
+# Write opencode.json
+# ---------------------------------------------------------------------------
+if [ -n "$TOKEN" ]; then
   mkdir -p "$CONFIG_DIR"
-  cat > "$CONFIG_DIR/opencode.json" <<EOF
+
+  if [ -f "$CONFIG_FILE" ]; then
+    echo "==> Updating existing $CONFIG_FILE"
+  else
+    echo "==> Creating $CONFIG_FILE"
+  fi
+
+  cat > "$CONFIG_FILE" <<EOF
 {
   "mcp": {
     "gross-view": {
       "type": "remote",
-      "url": "${OPENCODE_MCP_URL:-http://host.docker.internal:8082/api/mcp}",
-      "headers": { "Authorization": "Bearer ${OPENCODE_MCP_TOKEN}" }
+      "url": "$MCP_URL",
+      "headers": { "Authorization": "Bearer $TOKEN" }
     }
   }
 }
 EOF
-  echo "==> gross-view MCP registered for opencode (url=${OPENCODE_MCP_URL:-http://host.docker.internal:8082/api/mcp})"
+  echo "==> gross-view MCP registered for opencode (url=$MCP_URL)"
 else
-  echo "==> OPENCODE_MCP_TOKEN is not set - gross-view MCP NOT registered"
-  rm -f "$CONFIG_DIR/opencode.json"
+  if [ -f "$CONFIG_FILE" ]; then
+    echo "==> No new token obtained — keeping existing $CONFIG_FILE (its bearer token may still be valid; if expired, opencode reports the error via GET /mcp)."
+  else
+    echo "==> No MCP token available and no previous config — gross-view MCP NOT registered."
+  fi
 fi
 
 exec opencode web --port 4096 --hostname 0.0.0.0

@@ -83,6 +83,12 @@ services:
       OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD:-${OPENCODE_PASSWORD:-}}
       OPENCODE_MCP_URL: ${OPENCODE_MCP_URL:-http://host.docker.internal:8082/api/mcp}
       OPENCODE_MCP_TOKEN: ${OPENCODE_MCP_TOKEN:-}
+      # Auto-generate MCP token from Keycloak if OPENCODE_MCP_TOKEN is empty.
+      # KEYCLOAK_INTERNAL_URL: in-network plain-HTTP endpoint used by the entrypoint
+      # (busybox wget has no TLS); KEYCLOAK_URL stays the public HTTPS fallback.
+      KEYCLOAK_INTERNAL_URL: ${KEYCLOAK_INTERNAL_URL:-http://keycloak:8080}
+      OPENCODE_AGENT_CLIENT_ID: ${OPENCODE_AGENT_CLIENT_ID:-opencode-agent}
+      OPENCODE_AGENT_CLIENT_SECRET: ${OPENCODE_AGENT_CLIENT_SECRET:-}
     volumes:
       - opencode_data:/root/.config/opencode
       - ./opencode/entrypoint.sh:/entrypoint.sh:ro
