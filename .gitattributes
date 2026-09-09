@@ -1,0 +1,9 @@
+# Normalize line endings: text files get converted per platform default.
+* text=auto
+
+# Shell scripts MUST stay LF even on Windows (core.autocrlf=true):
+# CRLF breaks BusyBox ash with "set: illegal option -" inside Linux containers.
+*.sh text eol=lf
+
+# PowerShell scripts keep the native Windows CRLF form.
+*.ps1 text eol=crlf

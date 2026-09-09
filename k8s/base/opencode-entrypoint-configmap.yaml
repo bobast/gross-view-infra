@@ -17,7 +17,7 @@ data:
   entrypoint.sh: |
     #!/bin/sh
     set -e
-    
+
     # opencode entrypoint (docker-compose / k8s).
     # Registers the gross-view MCP server for the deployed agent by rendering
     # /root/.config/opencode/opencode.json.
@@ -41,37 +41,37 @@ data:
     #
     # Uses busybox wget (the opencode base image has no curl). Detect curl first,
     # fall back to wget for broader compatibility.
-    
+
     CONFIG_DIR=/root/.config/opencode
     CONFIG_FILE="$CONFIG_DIR/opencode.json"
     MCP_URL="${OPENCODE_MCP_URL:-http://host.docker.internal:8082/api/mcp}"
     CLIENT_ID="${OPENCODE_AGENT_CLIENT_ID:-opencode-agent}"
     KEYCLOAK_BASE="${KEYCLOAK_INTERNAL_URL:-${KEYCLOAK_URL:-https://gross-view.local/sso}}"
     TOKEN_URI="$KEYCLOAK_BASE/realms/gross-view-realm/protocol/openid-connect/token"
-    
+
     # ---------------------------------------------------------------------------
     # Token acquisition (resilient)
     # ---------------------------------------------------------------------------
     # On transient failures the acquisition is retried OPENCODE_TOKEN_MAX_ATTEMPTS
     # times (default 5). The failure reason is always logged. A previously working
-    # opencode.json is NEVER deleted on failure вЂ” a transient Keycloak hiccup must
+    # opencode.json is NEVER deleted on failure — a transient Keycloak hiccup must
     # not silently disable gross-view MCP (that produced the recurring
-    # "MCP-СЃРµСЂРІРµСЂС‹ РЅРµ РѕР±РЅР°СЂСѓР¶РµРЅС‹" outages). If the retained token has expired, the
+    # "MCP-серверы не обнаружены" outages). If the retained token has expired, the
     # server still starts and opencode reports the per-server error via GET /mcp,
     # which is diagnosable.
     TOKEN="${OPENCODE_MCP_TOKEN:-}"
-    
+
     if [ -z "$TOKEN" ] && [ -n "${OPENCODE_AGENT_CLIENT_SECRET:-}" ]; then
       BODY="grant_type=client_credentials&client_id=$CLIENT_ID&client_secret=$OPENCODE_AGENT_CLIENT_SECRET"
       MAX_ATTEMPTS="${OPENCODE_TOKEN_MAX_ATTEMPTS:-5}"
       ATTEMPT=0
-    
+
       while [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ] && [ -z "$TOKEN" ]; do
         ATTEMPT=$((ATTEMPT + 1))
         if [ "$ATTEMPT" -eq 1 ]; then
           echo "==> OPENCODE_MCP_TOKEN not set; obtaining token from Keycloak ($TOKEN_URI) ..."
         fi
-    
+
         RESP=""
         if command -v curl >/dev/null 2>&1; then
           RESP=$(curl -sS --max-time 10 -X POST "$TOKEN_URI" \
@@ -85,19 +85,19 @@ data:
           echo "ERROR: neither curl nor wget found in image; cannot auto-generate token."
           break
         fi
-    
-        # Extract access_token вЂ” works without jq. Collapse whitespace/newlines so the
+
+        # Extract access_token — works without jq. Collapse whitespace/newlines so the
         # key and value are on one logical line, then grab the value.
         TOKEN=$(echo "$RESP" \
           | tr -d ' \t\n\r' \
           | grep '"access_token"' \
           | sed 's/.*"access_token":"\([^"]*\)".*/\1/')
-    
+
         if [ -n "$TOKEN" ] && [ "$(echo "$TOKEN" | cut -c1-3)" = "eyJ" ]; then
           echo "==> Token obtained successfully (length=$(echo "$TOKEN" | wc -c), attempt=$ATTEMPT)"
           break
         fi
-    
+
         if [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; then
           echo "WARN: attempt $ATTEMPT/$MAX_ATTEMPTS failed to obtain token; retrying in 2s..."
         else
@@ -109,19 +109,19 @@ data:
         sleep 2
       done
     fi
-    
+
     # ---------------------------------------------------------------------------
     # Write opencode.json
     # ---------------------------------------------------------------------------
     if [ -n "$TOKEN" ]; then
       mkdir -p "$CONFIG_DIR"
-    
+
       if [ -f "$CONFIG_FILE" ]; then
         echo "==> Updating existing $CONFIG_FILE"
       else
         echo "==> Creating $CONFIG_FILE"
       fi
-    
+
       cat > "$CONFIG_FILE" <<EOF
     {
       "mcp": {
@@ -136,10 +136,10 @@ data:
       echo "==> gross-view MCP registered for opencode (url=$MCP_URL)"
     else
       if [ -f "$CONFIG_FILE" ]; then
-        echo "==> No new token obtained вЂ” keeping existing $CONFIG_FILE (its bearer token may still be valid; if expired, opencode reports the error via GET /mcp)."
+        echo "==> No new token obtained — keeping existing $CONFIG_FILE (its bearer token may still be valid; if expired, opencode reports the error via GET /mcp)."
       else
-        echo "==> No MCP token available and no previous config вЂ” gross-view MCP NOT registered."
+        echo "==> No MCP token available and no previous config — gross-view MCP NOT registered."
       fi
     fi
-    
+
     exec opencode web --port 4096 --hostname 0.0.0.0
