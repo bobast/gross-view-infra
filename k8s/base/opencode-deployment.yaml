@@ -27,6 +27,10 @@ spec:
           env:
             - name: DEEPSEEK_API_KEY
               valueFrom: { secretKeyRef: { name: gross-view-secrets, key: deepseek_api_key } }
+            - name: OPENCODE_SERVER_USERNAME
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: opencode_server_username } }
+            - name: OPENCODE_SERVER_PASSWORD
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: opencode_server_password } }
             - name: BROWSER
               value: "none"
           ports:

@@ -20,6 +20,8 @@ metadata:
     app.kubernetes.io/part-of: gross-view
 spec:
   schedule: "0 3 * * *"
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
       backoffLimit: 3

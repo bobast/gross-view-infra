@@ -94,6 +94,30 @@
       "clientRole" : false,
       "containerId" : "3310e961-e804-4c0c-87cb-27ccb9ab0d2b",
       "attributes" : { }
+    }, {
+      "id" : "a1c39e2b-7d44-4a1f-bd6e-3f0e2a9b7c55",
+      "name" : "MCP",
+      "description" : "Access to the gross-view MCP server (/api/mcp) for AI agents (opencode)",
+      "composite" : false,
+      "clientRole" : false,
+      "containerId" : "3310e961-e804-4c0c-87cb-27ccb9ab0d2b",
+      "attributes" : { }
+    }, {
+      "id" : "b2d41f3c-8e55-4c21-aef1-4a1e3b0c8c66",
+      "name" : "ANALYST",
+      "description" : "Financial analyst within a workspace (accounts, reports, MCP tools)",
+      "composite" : false,
+      "clientRole" : false,
+      "containerId" : "3310e961-e804-4c0c-87cb-27ccb9ab0d2b",
+      "attributes" : { }
+    }, {
+      "id" : "c3e5a04d-9f66-4c31-d7a2-5b2f4c1d9d77",
+      "name" : "ADMIN",
+      "description" : "Workspace administrator (write access, member management)",
+      "composite" : false,
+      "clientRole" : false,
+      "containerId" : "3310e961-e804-4c0c-87cb-27ccb9ab0d2b",
+      "attributes" : { }
     } ],
     "client" : {
       "gross-view-handler" : [ ],
@@ -395,7 +419,18 @@
   "webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister" : false,
   "webAuthnPolicyPasswordlessAcceptableAaguids" : [ ],
   "webAuthnPolicyPasswordlessExtraOrigins" : [ ],
-  "users" : [ ],
+  "users" : [ {
+    "id" : "e5a7c26f-b188-4e53-f9c4-7d4b6e3f1f99",
+    "username" : "service-account-opencode-agent",
+    "enabled" : true,
+    "totp" : false,
+    "emailVerified" : true,
+    "serviceAccountClientId" : "opencode-agent",
+    "realmRoles" : [ "MCP" ],
+    "clientRoles" : { },
+    "notBefore" : 0,
+    "groups" : [ ]
+  } ],
   "scopeMappings" : [ {
     "clientScope" : "offline_access",
     "roles" : [ "offline_access" ]
@@ -676,6 +711,44 @@
       }
     } ],
     "defaultClientScopes" : [ "web-origins", "acr", "roles", "profile", "email" ],
+    "optionalClientScopes" : [ "address", "phone", "offline_access", "microprofile-jwt" ]
+  }, {
+    "id" : "d4f6b15e-a0a7-4d42-e8b3-6c3a5d2e0e88",
+    "clientId" : "opencode-agent",
+    "name" : "OpenCode agent (deployed MCP client)",
+    "description" : "Confidential client + service account. The deployed (shared) opencode agent calls the gross-view MCP (/api/mcp) with a client_credentials token of this client.",
+    "rootUrl" : "",
+    "adminUrl" : "",
+    "baseUrl" : "",
+    "surrogateAuthRequired" : false,
+    "enabled" : true,
+    "alwaysDisplayInConsole" : false,
+    "clientAuthenticatorType" : "client-secret",
+    "secret" : "changeme-opencode-agent",
+    "redirectUris" : [ ],
+    "webOrigins" : [ ],
+    "notBefore" : 0,
+    "bearerOnly" : false,
+    "consentRequired" : false,
+    "standardFlowEnabled" : false,
+    "implicitFlowEnabled" : false,
+    "directAccessGrantsEnabled" : false,
+    "serviceAccountsEnabled" : true,
+    "publicClient" : false,
+    "frontchannelLogout" : false,
+    "protocol" : "openid-connect",
+    "attributes" : {
+      "access.token.lifespan" : "86400",
+      "client.secret.creation.time" : "1700000000",
+      "backchannel.logout.session.required" : "true",
+      "use.refresh.tokens" : "true",
+      "oidc.ciba.grant.enabled" : "false",
+      "backchannel.logout.revoke.offline.tokens" : "false"
+    },
+    "authenticationFlowBindingOverrides" : { },
+    "fullScopeAllowed" : true,
+    "nodeReRegistrationTimeout" : -1,
+    "defaultClientScopes" : [ "web-origins", "acr", "openid", "roles", "profile", "email" ],
     "optionalClientScopes" : [ "address", "phone", "offline_access", "microprofile-jwt" ]
   } ],
   "clientScopes" : [ {
