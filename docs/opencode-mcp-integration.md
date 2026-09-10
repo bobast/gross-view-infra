@@ -166,7 +166,7 @@ OPENCODE_AGENT_CLIENT_SECRET=<секрет клиента>   # нужен для
 > `OPENCODE_AGENT_CLIENT_SECRET` (плейсхолдер) — авто-генерация не запускалась.
 
 > **Устойчивость авто-генерации токена (с `wget`).** Получение токена ретраится
-> до `OPENCODE_TOKEN_MAX_ATTEMPTS` раз (по умолчанию 5, с паузой 2 сек). Причина
+> до `OPENCODE_TOKEN_MAX_ATTEMPTS` раз (по умолчанию 10, с паузой 2 сек). Причина
 > отказа всегда попадает в лог: `WARNING: … Response: wget: …`. Главное правило:
 > **ранее рабочий `opencode.json` никогда не удаляется при сбое** — transient-сбой
 > Keycloak больше не выключает gross-view MCP молча (так возникала повторяющаяся
@@ -174,6 +174,18 @@ OPENCODE_AGENT_CLIENT_SECRET=<секрет клиента>   # нужен для
 > `GET /mcp` возвращал `{}`). Если сохранённый токен протух — opencode стартует и
 > сообщает ошибку сервера в `GET /mcp` (`status: failed`, `error: "…"`), что
 > диагностируемо (см. раздел handler `OpenCodeMcpStatus.error`).
+
+> **Re-entry логика (status «unknown» / токен протух).** Начиная с фикса
+> 2026-09-10 entrypoint **проверяет `exp`** сохранённого токена (base64url payload
+> декодируется без jq: `tr _- /+` + `base64 -d` + греп `exp:` + сравнение с
+> `date +%s`) и, если он истёк или отсутствует, **самобновляет токен** из Keycloak
+> при старте — ручной `docker compose restart opencode` больше не нужен. Классическая
+> причина «постоянный unknown»: opencode стартовал раньше, чем Keycloak поднялся
+> (`wget: can't connect … Connection refused`), все попытки отвалились, а из volume
+> подхватился протухший токен. От race-условия защищает docker-compose:
+> `keycloak` имеет `healthcheck` (TCP-probe на 8080 через `/dev/tcp`, т.к. в образе
+> нет curl/wget, есть bash+timeout), а `opencode` ждёт `depends_on:
+> keycloak: condition: service_healthy`.
 
 ### 4.3 Первичная настройка при существующей БД Keycloak
 
@@ -206,9 +218,12 @@ KC=/opt/keycloak/bin/kcadm.sh   # внутри контейнера keycloak
    в workspace сервис-аккаунта.
 
 > **Срок жизни токена.** Токен `client_credentials` живёт `access.token.lifespan`
-> клиента (в `gross-view-realm.json` — 86400 c = 24 ч). Docker: при истечении
-> перезапустить контейнер (`docker compose restart opencode`) — токен будет
-> автоматически переиздан. K8s: см. §6 (CronJob обновления Secret).
+> клиента (в `gross-view-realm.json` — 86400 c = 24 ч). Docker: благодаря
+> re-entry логике (см. выше) каждый старт контейнера проверяет `exp` сохранённого
+> токена и **автоматически переиздаёт** протухший — отдельный ручной шаг не нужен;
+> `docker compose restart opencode` остаётся быстрым способом переподключить MCP
+> сразу (пересоздаёт конфиг и перезапускает сервер opencode). K8s: см. §6 (CronJob
+> обновления Secret) — там re-entry также сработает при деплое пода.
 
 ## 6. План доработок K8s (реализовано, применять при постановке API-деплоя)
 
@@ -237,7 +252,14 @@ KC=/opt/keycloak/bin/kcadm.sh   # внутри контейнера keycloak
    (из Secret, ключ `opencode_mcp_token`, `optional: true` — авто-генерация
    является fallback); entrypoint монтируется из ConfigMap `opencode-entrypoint`
    (`opencode-entrypoint-configmap.yaml`, `defaultMode: 0555`, скрипт синхронизирован
-   с docker-версией `opencode/entrypoint.sh`).
+   с docker-версией `opencode/entrypoint.sh`). **Docker-race-fix (см. §4.2/§5)**
+   дублирован как `initContainer wait-for-keycloak`: ждёт `/health/ready` на
+   `http://keycloak.gross-view.svc.cluster.local:8080` (цикл `wget` из образа
+   opencode, BusyBox) до старта main-контейнера — k8s не поддерживает `depends_on`/
+   `condition: service_healthy`, поэтому без initContainer opencode стартовал бы
+   раньше готовности Keycloak, entrypoint не получил бы токен, а MCP остался бы
+   в статусе «unknown». URL в initContainer обязан совпадать с
+   `gross-view-secrets/keycloak_internal_url`.
 5. **Токен в K8s**: если ключ `opencode_mcp_token` в Secret не задан, entrypoint
    авто-генерирует токен из `opencode_agent_client_secret` при старте пода. При
    истечении токена (24 ч) — перезапустить под (`kubectl rollout restart

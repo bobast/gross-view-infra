@@ -5,6 +5,7 @@
 #   - otherwise obtains a client_credentials token from Keycloak using
 #     OPENCODE_AGENT_CLIENT_ID/SECRET + KEYCLOAK_INTERNAL_URL (maximum automation);
 #   - writes /root/.config/opencode/opencode.json and execs opencode web.
+#   - generates mcp-first agent definition and skill for MCP-first behavior.
 # Apply by enabling it in kustomization.yaml along with the opencode Deployment/Service/PVC.
 apiVersion: v1
 kind: ConfigMap
@@ -31,7 +32,7 @@ data:
     #   OPENCODE_MCP_URL           - handler MCP endpoint (default http://host.docker.internal:8082/api/mcp)
     #   OPENCODE_AGENT_CLIENT_ID   - Keycloak client (default opencode-agent)
     #   OPENCODE_AGENT_CLIENT_SECRET - Keycloak client secret (required for auto-generation)
-    #   OPENCODE_TOKEN_MAX_ATTEMPTS   - token acquisition attempts (default 5, 2s apart)
+    #   OPENCODE_TOKEN_MAX_ATTEMPTS   - token acquisition attempts (default 10, 2s apart)
     #   KEYCLOAK_INTERNAL_URL      - internal (in-network, plain HTTP) Keycloak base URL,
     #                                preferred for token requests (docker: http://keycloak:8080;
     #                                k8s: http://keycloak.gross-view.svc.cluster.local:8080)
@@ -44,6 +45,10 @@ data:
 
     CONFIG_DIR=/root/.config/opencode
     CONFIG_FILE="$CONFIG_DIR/opencode.json"
+    AGENT_DIR="$CONFIG_DIR/agent"
+    AGENT_FILE="$AGENT_DIR/mcp-first.md"
+    SKILL_DIR="$CONFIG_DIR/skills/mcp-first"
+    SKILL_FILE="$SKILL_DIR/SKILL.md"
     MCP_URL="${OPENCODE_MCP_URL:-http://host.docker.internal:8082/api/mcp}"
     CLIENT_ID="${OPENCODE_AGENT_CLIENT_ID:-opencode-agent}"
     KEYCLOAK_BASE="${KEYCLOAK_INTERNAL_URL:-${KEYCLOAK_URL:-https://gross-view.local/sso}}"
@@ -53,7 +58,7 @@ data:
     # Token acquisition (resilient)
     # ---------------------------------------------------------------------------
     # On transient failures the acquisition is retried OPENCODE_TOKEN_MAX_ATTEMPTS
-    # times (default 5). The failure reason is always logged. A previously working
+    # times (default 10). The failure reason is always logged. A previously working
     # opencode.json is NEVER deleted on failure — a transient Keycloak hiccup must
     # not silently disable gross-view MCP (that produced the recurring
     # "MCP-серверы не обнаружены" outages). If the retained token has expired, the
@@ -61,15 +66,56 @@ data:
     # which is diagnosable.
     TOKEN="${OPENCODE_MCP_TOKEN:-}"
 
-    if [ -z "$TOKEN" ] && [ -n "${OPENCODE_AGENT_CLIENT_SECRET:-}" ]; then
+    # --- Token validity check (no jq, no base64url decoder in BusyBox) -----------
+    # Returns 0 if the JWT's exp claim is in the future, 1 if expired/missing.
+    # A fresh token is acquired when the detected lifetime is already gone.
+    token_is_valid() {
+      TOKEN_VALUE="$1"
+      [ -n "$TOKEN_VALUE" ] || return 1
+
+      PAYLOAD=$(echo "$TOKEN_VALUE" | cut -d. -f2)
+      [ -n "$PAYLOAD" ] || return 1
+
+      EXP=$(echo "$PAYLOAD" \
+        | tr '_-' '/+' \
+        | awk '{ l=length($0); if (l%4==2) $0=$0"=="; else if (l%4==3) $0=$0"="; print }' \
+        | base64 -d 2>/dev/null \
+        | tr -d '{}" \t\n\r' \
+        | grep -o 'exp:[0-9][0-9]*' \
+        | cut -d: -f2)
+      [ -n "$EXP" ] || return 1
+
+      [ "$(date +%s)" -lt "$EXP" ]
+    }
+
+    # If an existing opencode.json already carries a token, reuse it unless expired.
+    if [ -z "$TOKEN" ] && [ -f "$CONFIG_FILE" ]; then
+      TOKEN=$(sed -n 's/.*"Authorization": "Bearer \([^"]*\)".*/\1/p' "$CONFIG_FILE" | head -1)
+      if [ -n "$TOKEN" ]; then
+        echo "==> Reusing token from existing $CONFIG_FILE"
+      fi
+    fi
+
+    ACQUIRE=0
+    if [ -n "${OPENCODE_AGENT_CLIENT_SECRET:-}" ]; then
+      if [ -z "$TOKEN" ]; then
+        ACQUIRE=1
+      elif ! token_is_valid "$TOKEN"; then
+        echo "==> Existing token is expired or unparseable; refreshing from Keycloak."
+        ACQUIRE=1
+      fi
+    fi
+
+    if [ "$ACQUIRE" -eq 1 ]; then
       BODY="grant_type=client_credentials&client_id=$CLIENT_ID&client_secret=$OPENCODE_AGENT_CLIENT_SECRET"
-      MAX_ATTEMPTS="${OPENCODE_TOKEN_MAX_ATTEMPTS:-5}"
+      MAX_ATTEMPTS="${OPENCODE_TOKEN_MAX_ATTEMPTS:-10}"
       ATTEMPT=0
+      TOKEN=""
 
       while [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ] && [ -z "$TOKEN" ]; do
         ATTEMPT=$((ATTEMPT + 1))
         if [ "$ATTEMPT" -eq 1 ]; then
-          echo "==> OPENCODE_MCP_TOKEN not set; obtaining token from Keycloak ($TOKEN_URI) ..."
+          echo "==> OPENCODE_MCP_TOKEN not set (or expired); obtaining token from Keycloak ($TOKEN_URI) ..."
         fi
 
         RESP=""
@@ -124,6 +170,8 @@ data:
 
       cat > "$CONFIG_FILE" <<EOF
     {
+      "\$schema": "https://opencode.ai/config.json",
+      "default_agent": "mcp-first",
       "mcp": {
         "gross-view": {
           "type": "remote",
@@ -134,6 +182,91 @@ data:
     }
     EOF
       echo "==> gross-view MCP registered for opencode (url=$MCP_URL)"
+
+      # -------------------------------------------------------------------------
+      # Write mcp-first agent definition
+      # -------------------------------------------------------------------------
+      mkdir -p "$AGENT_DIR"
+
+      if [ -f "$AGENT_FILE" ]; then
+        echo "==> Updating existing $AGENT_FILE"
+      else
+        echo "==> Creating $AGENT_FILE"
+      fi
+
+      cat > "$AGENT_FILE" <<'AGENTEOF'
+    ---
+    description: Глубокий финансовый анализатор gross-view. Используй для любых вопросов об учёте, финансах, отчётах, планах счетов. Сначала проверяй MCP-инструменты.
+    mode: primary
+    permission:
+      edit: deny
+      write: deny
+      bash: ask
+      read: allow
+      glob: allow
+      grep: allow
+      task: allow
+      skill: allow
+      webfetch: allow
+      websearch: allow
+    ---
+
+    Вы — финансовый аналитик gross-view. ПРИОРИТЕТНЫЙ ПОРЯДОК ДЕЙСТВИЙ:
+
+    1. **СНАЧАЛА — MCP-инструменты.** При ЛЮБОМ запросе пользователя:
+       - Вызовите `list_accounts` или `get_account_plan` чтобы понять структуру данных
+       - Используйте специализированные отчёты: `get_profit_and_loss`, `get_balance_sheet`, `get_cash_flow`, `get_trial_balance`, `get_margin_analytics`, `get_cost_structure`
+       - Для фильтрации по аналитикам: `list_journal_analytics`, `list_report_analytics`
+       - Никогда не вычисляйте данные вручную, не генерируйте код для расчётов — MCP-сервер уже предоставляет всё необходимое
+    2. **ЧТЕНИЕ** — только если MCP-результат требует дополнительного контекста из репозитория
+    3. **ЗАПРОС ПОЛЬЗОВАТЕЛЮ** — если непонятно, какой инструмент вызвать
+    4. **КОД** — только для трансформаций/визуализации, которых нет в MCP
+
+    Запрещено генерировать код для расчёта того, что уже считает MCP. Сначала вызовите инструмент, затем проанализируйте результат.
+    AGENTEOF
+      echo "==> mcp-first agent defined"
+
+      # -------------------------------------------------------------------------
+      # Write mcp-first skill (MCP tool reference)
+      # -------------------------------------------------------------------------
+      mkdir -p "$SKILL_DIR"
+
+      if [ -f "$SKILL_FILE" ]; then
+        echo "==> Updating existing $SKILL_FILE"
+      else
+        echo "==> Creating $SKILL_FILE"
+      fi
+
+      cat > "$SKILL_FILE" <<'SKILLEOF'
+    ---
+    name: mcp-first
+    description: Используй когда пользователь спрашивает о финансах, учёте, отчётах, планах счетов, выручке, себестоимости, прибыли, балансе, движении денежных средств, транзакциях, аналитиках gross-view. Список всех MCP-инструментов.
+    ---
+
+    # Справочник MCP-инструментов gross-view
+
+    Все доступные инструменты подключённого MCP-сервера `gross-view`:
+
+    | Инструмент | Назначение |
+    |---|---|
+    | `list_accounts` | Список всех счетов плана (id, код, описание) |
+    | `get_account_plan` | Текущий план счетов (read-only): счета, операции с дебетом/кредитом, аналитики |
+    | `query_account_plan` | Синхронизация плана счетов (write) |
+    | `get_profit_and_loss` | Отчёт о прибылях и убытках за период с разбиением по аналитикам |
+    | `get_balance_sheet` | Бухгалтерский баланс на отчётную дату (активы, обязательства, капитал) |
+    | `get_cash_flow` | Отчёт о движении денежных средств (поступления/выбытия по денежным счетам) |
+    | `get_trial_balance` | Оборотно-сальдовая ведомость по счетам за период |
+    | `get_margin_analytics` | Экспресс-аналитика себестоимости и маржинальности (KPI, динамика, структура затрат) |
+    | `get_cost_structure` | Структура себестоимости за период (закупочная стоимость, ТЗР, услуги) |
+    | `list_journal_analytics` | Уникальные значения аналитик из журнала проводок |
+    | `list_report_analytics` | Справочник аналитик для фильтра P&L |
+    | `sync_accounting_policies` | Синхронизация учётных политик (write) |
+    | `delete_account_plan` | Удаление плана счетов (write) |
+    | `cleanup_orphaned_journal_entries` | Очистка осиротевших проводок (write) |
+
+    При финансовом запросе ВСЕГДА вызывайте инструменты первыми. Не генерируйте код для расчёта того, что уже считает MCP.
+    SKILLEOF
+      echo "==> mcp-first skill defined (tool reference)"
     else
       if [ -f "$CONFIG_FILE" ]; then
         echo "==> No new token obtained — keeping existing $CONFIG_FILE (its bearer token may still be valid; if expired, opencode reports the error via GET /mcp)."

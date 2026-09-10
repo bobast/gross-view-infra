@@ -51,6 +51,12 @@ services:
     volumes:
       - ./themes:/opt/keycloak/themes
       - ./gross-view-realm.json:/opt/keycloak/data/import/gross-view-realm.json
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && { exec 3<&-; exec 3>&-; } && exit 0 || exit 1"]
+      interval: 10s
+      retries: 30
+      start_period: 60s
+      timeout: 5s
     depends_on:
       - postgres
     networks:
@@ -97,6 +103,9 @@ services:
     restart: always
     extra_hosts:
       - host.docker.internal:host-gateway
+    depends_on:
+      keycloak:
+        condition: service_healthy
     networks:
       keycloak_network:
         ipv4_address: 172.28.0.5

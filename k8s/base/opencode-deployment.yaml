@@ -20,6 +20,26 @@ spec:
         app.kubernetes.io/name: opencode
         app.kubernetes.io/part-of: gross-view
     spec:
+      # Mirrors docker-compose `depends_on: keycloak: condition: service_healthy`.
+      # k8s has no such mechanism, so an initContainer waits for Keycloak's
+      # /health/ready before the entrypoint tries to obtain the MCP token
+      # (otherwise opencode starts while Keycloak is still building/importing,
+      # the token fetch fails, and MCP stays "unknown").
+      # NOTE: the host here MUST match gross-view-secrets/keycloak_internal_url.
+      initContainers:
+        - name: wait-for-keycloak
+          image: ghcr.io/anomalyco/opencode:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "==> waiting for Keycloak readiness (keycloak.gross-view.svc.cluster.local:8080) ..."
+              until wget -q -O /dev/null -T 5 \
+                http://keycloak.gross-view.svc.cluster.local:8080/health/ready; do
+                echo "    keycloak not ready yet; retrying in 3s..."
+                sleep 3
+              done
+              echo "==> Keycloak is ready."
       containers:
         - name: opencode
           image: ghcr.io/anomalyco/opencode:latest
