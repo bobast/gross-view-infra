@@ -183,7 +183,7 @@ mode: primary
 permission:
   edit: deny
   write: deny
-  bash: ask
+  bash: deny
   read: allow
   glob: allow
   grep: allow
