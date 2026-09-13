@@ -72,27 +72,27 @@ spec:
               containerPort: 8080
           volumeMounts:
             - name: themes
-              mountPath: /opt/keycloak/themes/login/theme.properties
+              mountPath: /opt/keycloak/themes/gross-view/login/theme.properties
               subPath: theme.properties
               readOnly: true
             - name: themes
-              mountPath: /opt/keycloak/themes/login/messages/login.properties
+              mountPath: /opt/keycloak/themes/gross-view/login/messages/login.properties
               subPath: login.properties
               readOnly: true
             - name: themes
-              mountPath: /opt/keycloak/themes/login/messages/login_en.properties
+              mountPath: /opt/keycloak/themes/gross-view/login/messages/login_en.properties
               subPath: login_en.properties
               readOnly: true
             - name: themes
-              mountPath: /opt/keycloak/themes/login/messages/login_ru.properties
+              mountPath: /opt/keycloak/themes/gross-view/login/messages/login_ru.properties
               subPath: login_ru.properties
               readOnly: true
             - name: themes
-              mountPath: /opt/keycloak/themes/login/resources/css/login.css
+              mountPath: /opt/keycloak/themes/gross-view/login/resources/css/login.css
               subPath: login.css
               readOnly: true
             - name: themes
-              mountPath: /opt/keycloak/themes/login/resources/js/theme.js
+              mountPath: /opt/keycloak/themes/gross-view/login/resources/js/theme.js
               subPath: theme.js
               readOnly: true
             - name: realm-import
