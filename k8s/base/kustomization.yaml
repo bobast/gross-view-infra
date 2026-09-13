@@ -18,6 +18,8 @@ resources:
   - nginx-configmap.yaml
   - nginx-deployment.yaml
   - nginx-service.yaml
+  - gross-view-ui-deployment.yaml
+  - gross-view-ui-service.yaml
 #  - opencode-deployment.yaml
 #  - opencode-service.yaml
 #  - opencode-pvc.yaml

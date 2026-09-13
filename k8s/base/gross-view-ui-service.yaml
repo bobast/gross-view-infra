@@ -1,0 +1,20 @@
+# gross-view-ui - Service (internal, ClusterIP).
+# Consumed by the main nginx proxy (`$gv_ui_upstream` in nginx-configmap.yaml)
+# and referenced by ingress.yaml (reference-only). Port 80 mirrors the nginx
+# container port inside the gross-view-ui image.
+apiVersion: v1
+kind: Service
+metadata:
+  name: gross-view-ui
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: gross-view-ui
+    app.kubernetes.io/part-of: gross-view
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: gross-view-ui
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

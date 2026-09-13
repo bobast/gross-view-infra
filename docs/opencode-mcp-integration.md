@@ -229,7 +229,7 @@ KC=/opt/keycloak/bin/kcadm.sh   # внутри контейнера keycloak
 
 1. **Новые манифесты** `k8s/base/gross-view-api-deployment.yaml` +
    `gross-view-api-service.yaml` (Deployment `gross-view-api` + ClusterIP :8082,
-   зеркало docker `handler`): image `ghcr.io/gross-view/gross-view-handler`,
+   зеркало docker `handler`): image `gross-view.registry.twcstorage.ru/gross-view/gross-view-handler`,
    env: `KEYCLOAK_URL=mint-box.ru`, `POSTGRES_URL=postgres:5432`,
    `DB_USER/DB_PASS` из `gross-view-secrets` (`gv_db_user`/`gv_db_password`),
    `CREDENTIAL_ENCRYPTION_KEY`, `OPENCODE_BASE_URL=http://opencode.gross-view.svc.cluster.local:4096`,

@@ -61,4 +61,4 @@ spec:
               service:
                 name: gross-view-ui
                 port:
-                  number: 5173
+                  number: 80

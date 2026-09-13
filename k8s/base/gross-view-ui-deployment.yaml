@@ -1,0 +1,54 @@
+# gross-view-ui - Deployment (static SPA server for the gross-view-ui project).
+# Image `gross-view.registry.twcstorage.ru/gross-view/gross-view-ui:latest` (Timeweb
+# Cloud Container Registry, "Артефактори") is built from ../gross-view-ui
+# (nginx:stable-alpine + dist/, see its Dockerfile/nginx/default.conf) and serves
+# the landing page of the new gross-view-ui SPA behind the main nginx (`location /`
+# -> gross-view-ui Service). Internal only: no LoadBalancer/hostPort.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gross-view-ui
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: gross-view-ui
+    app.kubernetes.io/part-of: gross-view
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gross-view-ui
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gross-view-ui
+        app.kubernetes.io/part-of: gross-view
+    spec:
+      containers:
+        - name: gross-view-ui
+          image: gross-view.registry.twcstorage.ru/gross-view/gross-view-ui:latest
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+      imagePullSecrets:
+        - name: gross-view-registry

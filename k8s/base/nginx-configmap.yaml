@@ -58,7 +58,7 @@ data:
         resolver kube-dns.kube-system.svc.cluster.local valid=30s ipv6=off;
         set $keycloak_upstream http://keycloak.gross-view.svc.cluster.local:8080;
         set $gv_api_upstream http://gross-view-api.gross-view.svc.cluster.local:8082;
-        set $gv_ui_upstream http://gross-view-ui.gross-view.svc.cluster.local:5173;
+        set $gv_ui_upstream http://gross-view-ui.gross-view.svc.cluster.local:80;
 
         # Keycloak SSO
         location /sso/ {
@@ -94,14 +94,13 @@ data:
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        # Frontend (gross-view-ui Service, WebSocket support)
+        # Frontend: gross-view-ui static SPA (nginx:alpine serving dist/, SPA
+        # fallback for client-side routing). No WebSocket upgrade headers needed.
         location / {
             proxy_pass $gv_ui_upstream;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
         }
     }
