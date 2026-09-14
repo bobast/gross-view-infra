@@ -22,7 +22,7 @@
   var LOCALE_COOKIE_NAME = 'KEYCLOAK_LOCALE';
 
   function isLocale(value) {
-    return value === 'ru' || value === 'en';
+    return value === 'ru' || value === 'en' || value === 'zh' || value === 'zh-CN';
   }
 
   function applyTheme() {
@@ -77,7 +77,7 @@
   //
   // Rebuilds the Keycloak header so it mirrors the site's sticky toolbar:
   // a brand block ("GV" + "Gross View") on the left and, on the right, the
-  // theme toggle and the RU / EN segmented locale switcher. All of these
+  // theme toggle and the RU / EN / ZH segmented locale switcher. All of these
   // already exist in the site's header, so the login page no longer looks
   // foreign. The brand links to the site root, which nginx routes to the SPA.
   // ---------------------------------------------------------------------------
@@ -87,12 +87,19 @@
   var SUN_ICON =
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
 
-  function isRussian() {
-    return (document.documentElement.lang || '').substring(0, 2).toLowerCase() === 'ru';
-  }
-
   function currentLocaleCode() {
     return (document.documentElement.lang || '').substring(0, 2).toLowerCase();
+  }
+
+  /** Picks the UI label for the given locale code (falls back to English). */
+  function localeText(code, ru, en, zh) {
+    if (code === 'ru') {
+      return ru;
+    }
+    if (code === 'zh') {
+      return zh;
+    }
+    return en;
   }
 
   /** Extracts the two-letter locale code from a Keycloak locale switch link. */
@@ -117,20 +124,24 @@
     if (/en|engl|англ/.test(label)) {
       return 'en';
     }
+    if (/zh|中文|汉/.test(label)) {
+      return 'zh';
+    }
     return '';
   }
 
   function renderThemeToggle(button, isDark) {
+    var lang = currentLocaleCode();
     button.innerHTML = isDark ? SUN_ICON : MOON_ICON;
     button.setAttribute(
       'aria-label',
       isDark
-        ? isRussian() ? 'Переключить на светлую тему' : 'Switch to light theme'
-        : isRussian() ? 'Переключить на тёмную тему' : 'Switch to dark theme'
+        ? localeText(lang, 'Переключить на светлую тему', 'Switch to light theme', '切换到浅色主题')
+        : localeText(lang, 'Переключить на тёмную тему', 'Switch to dark theme', '切换到深色主题')
     );
     button.title = isDark
-      ? isRussian() ? 'Светлая тема' : 'Light theme'
-      : isRussian() ? 'Тёмная тема' : 'Dark theme';
+      ? localeText(lang, 'Светлая тема', 'Light theme', '浅色主题')
+      : localeText(lang, 'Тёмная тема', 'Dark theme', '深色主题');
   }
 
   function buildThemeToggle() {
@@ -152,14 +163,14 @@
   }
 
   /**
-   * Rebuilds Keycloak's locale dropdown into the site's RU / EN segmented
+   * Rebuilds Keycloak's locale dropdown into the site's RU / EN / ZH segmented
    * control, reusing the original switch links so the locale choice persists.
    */
   function buildLocaleSwitcher(localeEl) {
     var switcher = document.createElement('div');
     switcher.className = 'kc-locale-switcher';
     switcher.setAttribute('role', 'group');
-    switcher.setAttribute('aria-label', isRussian() ? 'Язык' : 'Language');
+    switcher.setAttribute('aria-label', localeText(currentLocaleCode(), 'Язык', 'Language', '语言'));
 
     var current = currentLocaleCode();
     var links = localeEl.querySelectorAll('a[href]');
@@ -218,7 +229,7 @@
 
     var nav = document.createElement('nav');
     nav.className = 'kc-header__nav';
-    nav.setAttribute('aria-label', isRussian() ? 'Основная навигация' : 'Main navigation');
+    nav.setAttribute('aria-label', localeText(currentLocaleCode(), 'Основная навигация', 'Main navigation', '主导航'));
 
     var locale = document.getElementById('kc-locale');
     if (locale) {

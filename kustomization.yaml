@@ -18,9 +18,10 @@ configMapGenerator:
     namespace: gross-view
     files:
       - theme.properties=themes/gross-view/login/theme.properties
-      - login.properties=themes/gross-view/login/messages/login.properties
-      - login_en.properties=themes/gross-view/login/messages/login_en.properties
-      - login_ru.properties=themes/gross-view/login/messages/login_ru.properties
+      - messages.properties=themes/gross-view/login/messages/messages.properties
+      - messages_en.properties=themes/gross-view/login/messages/messages_en.properties
+      - messages_ru.properties=themes/gross-view/login/messages/messages_ru.properties
+      - messages_zh_CN.properties=themes/gross-view/login/messages/messages_zh_CN.properties
       - login.css=themes/gross-view/login/resources/css/login.css
       - theme.js=themes/gross-view/login/resources/js/theme.js
 

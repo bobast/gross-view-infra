@@ -76,16 +76,20 @@ spec:
               subPath: theme.properties
               readOnly: true
             - name: themes
-              mountPath: /opt/keycloak/themes/gross-view/login/messages/login.properties
-              subPath: login.properties
+              mountPath: /opt/keycloak/themes/gross-view/login/messages/messages.properties
+              subPath: messages.properties
               readOnly: true
             - name: themes
-              mountPath: /opt/keycloak/themes/gross-view/login/messages/login_en.properties
-              subPath: login_en.properties
+              mountPath: /opt/keycloak/themes/gross-view/login/messages/messages_en.properties
+              subPath: messages_en.properties
               readOnly: true
             - name: themes
-              mountPath: /opt/keycloak/themes/gross-view/login/messages/login_ru.properties
-              subPath: login_ru.properties
+              mountPath: /opt/keycloak/themes/gross-view/login/messages/messages_ru.properties
+              subPath: messages_ru.properties
+              readOnly: true
+            - name: themes
+              mountPath: /opt/keycloak/themes/gross-view/login/messages/messages_zh_CN.properties
+              subPath: messages_zh_CN.properties
               readOnly: true
             - name: themes
               mountPath: /opt/keycloak/themes/gross-view/login/resources/css/login.css
