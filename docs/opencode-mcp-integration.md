@@ -109,7 +109,6 @@ opencode mcp auth gross-view   # браузер -> Keycloak -> callback 127.0.0.
 | `opencode/entrypoint.sh` | генерирует `/root/.config/opencode/opencode.json` (remote MCP); **авто-генерация токена из Keycloak** (`client_credentials`), если `OPENCODE_MCP_TOKEN` не задан |
 | `scripts/get-opencode-mcp-token.ps1` | ручная выдача `client_credentials`-токена (для override/диагностики) |
 | `.env.example` | + `KEYCLOAK_INTERNAL_URL`, `CREDENTIAL_ENCRYPTION_KEY`, `OPENCODE_*`, `OZON_*` |
-| `dns/dnsmasq.conf` | + `gross-view-api`/`gross-view-api.local` → `172.28.0.9` |
 | `gross-view-realm.json` | + realm-роли `MCP`/`ANALYST`/`ADMIN`; + конфиденциальный клиент `opencode-agent` (service account); + service-account пользователь с ролью `MCP` |
 | `gross-view-handler` (соседний репозиторий) | + `Dockerfile` + `.dockerignore` (по §14.1 AGENTS.md handler-а) |
 

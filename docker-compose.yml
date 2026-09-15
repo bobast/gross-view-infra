@@ -115,10 +115,6 @@ volumes:
     driver: local
   opencode_data:
     driver: local
-  wireguard_config:
-    driver: local
-  vault_data:
-    driver: local
 
 networks:
   keycloak_network:

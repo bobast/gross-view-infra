@@ -1,5 +1,5 @@
 # opencode - Deployment
-# Replaces n8n: AI coding agent (web UI mode).
+# AI coding agent (web UI mode).
 # Uses file-based storage (no DB needed), PersistentVolume for config/sessions.
 apiVersion: apps/v1
 kind: Deployment
