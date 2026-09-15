@@ -15,6 +15,8 @@ metadata:
     app.kubernetes.io/part-of: gross-view
 spec:
   replicas: 1
+  # Keep no old ReplicaSets: obsolete revisions for nonexistent pods are cleaned up.
+  revisionHistoryLimit: 0
   selector:
     matchLabels:
       app.kubernetes.io/name: keycloak
