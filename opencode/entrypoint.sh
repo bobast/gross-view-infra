@@ -3,27 +3,27 @@ set -e
 
 # opencode entrypoint (docker-compose / k8s).
 # Registers the gross-view MCP server for the deployed agent by rendering
-# /root/.config/opencode/opencode.json.
+# /root/.config/opencode/opencode.json and generates the mcp-first agent and
+# skill, then execs `opencode web`.
 #
-# Token auto-generation (maximum automation):
-#   If OPENCODE_MCP_TOKEN is empty but Keycloak client credentials are
-#   available, a client_credentials token is obtained automatically.
+# MCP authentication — OAuth 2.0 (RFC 9728) as the REAL user, not a shared
+# service-account token: the handler's /api/mcp answers 401 with a
+# WWW-Authenticate Bearer resource_metadata header, opencode starts the
+# authorization-code flow (PKCE) against the pre-registered public Keycloak
+# client and stores the resulting tokens in mcp-auth.json. No secret is shared
+# between handler and agent anymore.
+#
+# One-time activation (headless: BROWSER=none prints the authorization URL):
+#   opencode mcp auth gross-view
+# Tokens are persisted on the opencode data volume (mounted at
+# /root/.local/share/opencode) and survive container restarts.
 #
 # Environment variables:
-#   OPENCODE_MCP_TOKEN         - pre-set bearer token (highest priority)
-#   OPENCODE_MCP_URL           - handler MCP endpoint (default http://host.docker.internal:8082/api/mcp)
-#   OPENCODE_AGENT_CLIENT_ID   - Keycloak client (default opencode-agent)
-#   OPENCODE_AGENT_CLIENT_SECRET - Keycloak client secret (required for auto-generation)
-#   OPENCODE_TOKEN_MAX_ATTEMPTS   - token acquisition attempts (default 10, 2s apart)
-#   KEYCLOAK_INTERNAL_URL      - internal (in-network, plain HTTP) Keycloak base URL,
-#                                preferred for token requests (docker: http://keycloak:8080;
-#                                k8s: http://keycloak.gross-view.svc.cluster.local:8080)
-#   KEYCLOAK_URL               - public Keycloak base URL (fallback if internal unset)
-#
-# If none of the above produces a valid token the MCP server is NOT registered.
-#
-# Uses busybox wget (the opencode base image has no curl). Detect curl first,
-# fall back to wget for broader compatibility.
+#   OPENCODE_MCP_URL          - handler MCP endpoint
+#                               (default http://host.docker.internal:8082/api/mcp)
+#   OPENCODE_MCP_CLIENT_ID    - pre-registered Keycloak public client
+#                               (default opencode-mcp)
+#   OPENCODE_MCP_SCOPE        - OAuth scope to request (default openid)
 
 CONFIG_DIR=/root/.config/opencode
 CONFIG_FILE="$CONFIG_DIR/opencode.json"
@@ -32,125 +32,21 @@ AGENT_FILE="$AGENT_DIR/mcp-first.md"
 SKILL_DIR="$CONFIG_DIR/skills/mcp-first"
 SKILL_FILE="$SKILL_DIR/SKILL.md"
 MCP_URL="${OPENCODE_MCP_URL:-http://host.docker.internal:8082/api/mcp}"
-CLIENT_ID="${OPENCODE_AGENT_CLIENT_ID:-opencode-agent}"
-KEYCLOAK_BASE="${KEYCLOAK_INTERNAL_URL:-${KEYCLOAK_URL:-https://gross-view.local/sso}}"
-TOKEN_URI="$KEYCLOAK_BASE/realms/gross-view-realm/protocol/openid-connect/token"
-
-# ---------------------------------------------------------------------------
-# Token acquisition (resilient)
-# ---------------------------------------------------------------------------
-# On transient failures the acquisition is retried OPENCODE_TOKEN_MAX_ATTEMPTS
-# times (default 10). The failure reason is always logged. A previously working
-# opencode.json is NEVER deleted on failure — a transient Keycloak hiccup must
-# not silently disable gross-view MCP (that produced the recurring
-# "MCP-серверы не обнаружены" outages). If the retained token has expired, the
-# server still starts and opencode reports the per-server error via GET /mcp,
-# which is diagnosable.
-TOKEN="${OPENCODE_MCP_TOKEN:-}"
-
-# --- Token validity check (no jq, no base64url decoder in BusyBox) -----------
-# Returns 0 if the JWT's exp claim is in the future, 1 if expired/missing.
-# A fresh token is acquired when the detected lifetime is already gone.
-token_is_valid() {
-  TOKEN_VALUE="$1"
-  [ -n "$TOKEN_VALUE" ] || return 1
-
-  PAYLOAD=$(echo "$TOKEN_VALUE" | cut -d. -f2)
-  [ -n "$PAYLOAD" ] || return 1
-
-  EXP=$(echo "$PAYLOAD" \
-    | tr '_-' '/+' \
-    | awk '{ l=length($0); if (l%4==2) $0=$0"=="; else if (l%4==3) $0=$0"="; print }' \
-    | base64 -d 2>/dev/null \
-    | tr -d '{}" \t\n\r' \
-    | grep -o 'exp:[0-9][0-9]*' \
-    | cut -d: -f2)
-  [ -n "$EXP" ] || return 1
-
-  [ "$(date +%s)" -lt "$EXP" ]
-}
-
-# If an existing opencode.json already carries a token, reuse it unless expired.
-if [ -z "$TOKEN" ] && [ -f "$CONFIG_FILE" ]; then
-  TOKEN=$(sed -n 's/.*"Authorization": "Bearer \([^"]*\)".*/\1/p' "$CONFIG_FILE" | head -1)
-  if [ -n "$TOKEN" ]; then
-    echo "==> Reusing token from existing $CONFIG_FILE"
-  fi
-fi
-
-ACQUIRE=0
-if [ -n "${OPENCODE_AGENT_CLIENT_SECRET:-}" ]; then
-  if [ -z "$TOKEN" ]; then
-    ACQUIRE=1
-  elif ! token_is_valid "$TOKEN"; then
-    echo "==> Existing token is expired or unparseable; refreshing from Keycloak."
-    ACQUIRE=1
-  fi
-fi
-
-if [ "$ACQUIRE" -eq 1 ]; then
-  BODY="grant_type=client_credentials&client_id=$CLIENT_ID&client_secret=$OPENCODE_AGENT_CLIENT_SECRET"
-  MAX_ATTEMPTS="${OPENCODE_TOKEN_MAX_ATTEMPTS:-10}"
-  ATTEMPT=0
-  TOKEN=""
-
-  while [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ] && [ -z "$TOKEN" ]; do
-    ATTEMPT=$((ATTEMPT + 1))
-    if [ "$ATTEMPT" -eq 1 ]; then
-      echo "==> OPENCODE_MCP_TOKEN not set (or expired); obtaining token from Keycloak ($TOKEN_URI) ..."
-    fi
-
-    RESP=""
-    if command -v curl >/dev/null 2>&1; then
-      RESP=$(curl -sS --max-time 10 -X POST "$TOKEN_URI" \
-        -H "Content-Type: application/x-www-form-urlencoded" -d "$BODY" 2>&1) || true
-    elif command -v wget >/dev/null 2>&1; then
-      RESP=$(wget -q -O - -T 10 \
-        --header "Content-Type: application/x-www-form-urlencoded" \
-        --post-data "$BODY" \
-        "$TOKEN_URI" 2>&1) || true
-    else
-      echo "ERROR: neither curl nor wget found in image; cannot auto-generate token."
-      break
-    fi
-
-    # Extract access_token — works without jq. Collapse whitespace/newlines so the
-    # key and value are on one logical line, then grab the value.
-    TOKEN=$(echo "$RESP" \
-      | tr -d ' \t\n\r' \
-      | grep '"access_token"' \
-      | sed 's/.*"access_token":"\([^"]*\)".*/\1/')
-
-    if [ -n "$TOKEN" ] && [ "$(echo "$TOKEN" | cut -c1-3)" = "eyJ" ]; then
-      echo "==> Token obtained successfully (length=$(echo "$TOKEN" | wc -c), attempt=$ATTEMPT)"
-      break
-    fi
-
-    if [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; then
-      echo "WARN: attempt $ATTEMPT/$MAX_ATTEMPTS failed to obtain token; retrying in 2s..."
-    else
-      echo "WARNING: Could not obtain token from Keycloak after $MAX_ATTEMPTS attempts."
-      echo "         Endpoint: $TOKEN_URI"
-      echo "         Response: $(echo "$RESP" | tr '\n' ' ' | cut -c1-300)"
-      echo "         gross-view MCP will NOT be (re)registered."
-    fi
-    sleep 2
-  done
-fi
+MCP_CLIENT_ID="${OPENCODE_MCP_CLIENT_ID:-opencode-mcp}"
+MCP_SCOPE="${OPENCODE_MCP_SCOPE:-openid}"
 
 # ---------------------------------------------------------------------------
 # Write opencode.json
 # ---------------------------------------------------------------------------
-if [ -n "$TOKEN" ]; then
-  mkdir -p "$CONFIG_DIR"
+mkdir -p "$CONFIG_DIR"
 
-  if [ -f "$CONFIG_FILE" ]; then
-    echo "==> Updating existing $CONFIG_FILE"
-  else
-    echo "==> Creating $CONFIG_FILE"
-  fi
+if [ -f "$CONFIG_FILE" ]; then
+  echo "==> Updating existing $CONFIG_FILE"
+else
+  echo "==> Creating $CONFIG_FILE"
+fi
 
-  cat > "$CONFIG_FILE" <<EOF
+cat > "$CONFIG_FILE" <<EOF
 {
   "\$schema": "https://opencode.ai/config.json",
   "default_agent": "mcp-first",
@@ -158,25 +54,28 @@ if [ -n "$TOKEN" ]; then
     "gross-view": {
       "type": "remote",
       "url": "$MCP_URL",
-      "headers": { "Authorization": "Bearer $TOKEN" }
+      "oauth": {
+        "clientId": "$MCP_CLIENT_ID",
+        "scope": "$MCP_SCOPE"
+      }
     }
   }
 }
 EOF
-  echo "==> gross-view MCP registered for opencode (url=$MCP_URL)"
+echo "==> gross-view MCP registered for opencode (url=$MCP_URL, oauth clientId=$MCP_CLIENT_ID)"
 
-  # -------------------------------------------------------------------------
-  # Write mcp-first agent definition
-  # -------------------------------------------------------------------------
-  mkdir -p "$AGENT_DIR"
+# ---------------------------------------------------------------------------
+# Write mcp-first agent definition
+# ---------------------------------------------------------------------------
+mkdir -p "$AGENT_DIR"
 
-  if [ -f "$AGENT_FILE" ]; then
-    echo "==> Updating existing $AGENT_FILE"
-  else
-    echo "==> Creating $AGENT_FILE"
-  fi
+if [ -f "$AGENT_FILE" ]; then
+  echo "==> Updating existing $AGENT_FILE"
+else
+  echo "==> Creating $AGENT_FILE"
+fi
 
-  cat > "$AGENT_FILE" <<'AGENTEOF'
+cat > "$AGENT_FILE" <<'AGENTEOF'
 ---
 description: Глубокий финансовый анализатор gross-view. Используй для любых вопросов об учёте, финансах, отчётах, планах счетов. Сначала проверяй MCP-инструменты.
 mode: primary
@@ -206,20 +105,20 @@ permission:
 
 Запрещено генерировать код для расчёта того, что уже считает MCP. Сначала вызовите инструмент, затем проанализируйте результат.
 AGENTEOF
-  echo "==> mcp-first agent defined"
+echo "==> mcp-first agent defined"
 
-  # -------------------------------------------------------------------------
-  # Write mcp-first skill (MCP tool reference)
-  # -------------------------------------------------------------------------
-  mkdir -p "$SKILL_DIR"
+# ---------------------------------------------------------------------------
+# Write mcp-first skill (MCP tool reference)
+# ---------------------------------------------------------------------------
+mkdir -p "$SKILL_DIR"
 
-  if [ -f "$SKILL_FILE" ]; then
-    echo "==> Updating existing $SKILL_FILE"
-  else
-    echo "==> Creating $SKILL_FILE"
-  fi
+if [ -f "$SKILL_FILE" ]; then
+  echo "==> Updating existing $SKILL_FILE"
+else
+  echo "==> Creating $SKILL_FILE"
+fi
 
-  cat > "$SKILL_FILE" <<'SKILLEOF'
+cat > "$SKILL_FILE" <<'SKILLEOF'
 ---
 name: mcp-first
 description: Используй когда пользователь спрашивает о финансах, учёте, отчётах, планах счетов, выручке, себестоимости, прибыли, балансе, движении денежных средств, транзакциях, аналитиках gross-view. Список всех MCP-инструментов.
@@ -248,13 +147,6 @@ description: Используй когда пользователь спраши
 
 При финансовом запросе ВСЕГДА вызывайте инструменты первыми. Не генерируйте код для расчёта того, что уже считает MCP.
 SKILLEOF
-  echo "==> mcp-first skill defined (tool reference)"
-else
-  if [ -f "$CONFIG_FILE" ]; then
-    echo "==> No new token obtained — keeping existing $CONFIG_FILE (its bearer token may still be valid; if expired, opencode reports the error via GET /mcp)."
-  else
-    echo "==> No MCP token available and no previous config — gross-view MCP NOT registered."
-  fi
-fi
+echo "==> mcp-first skill defined (tool reference)"
 
 exec opencode web --port 4096 --hostname 0.0.0.0

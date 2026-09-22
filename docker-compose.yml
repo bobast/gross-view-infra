@@ -83,29 +83,22 @@ services:
     image: ghcr.io/anomalyco/opencode:latest
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
     environment:
+      # No server-side auth: the handler→opencode direction passes the real
+      # user's JWT (attribution), not Basic auth — the server runs on the internal
+      # network without its own credentials (gross-view-handler change).
       BROWSER: "none"
-      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
-      OPENCODE_SERVER_USERNAME: opencode
-      OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD:-${OPENCODE_PASSWORD:-}}
       OPENCODE_MCP_URL: ${OPENCODE_MCP_URL:-http://host.docker.internal:8082/api/mcp}
-      OPENCODE_MCP_TOKEN: ${OPENCODE_MCP_TOKEN:-}
-      # Auto-generate MCP token from Keycloak if OPENCODE_MCP_TOKEN is empty.
-      # KEYCLOAK_INTERNAL_URL: in-network plain-HTTP endpoint used by the entrypoint
-      # (busybox wget has no TLS); KEYCLOAK_URL stays the public HTTPS fallback.
-      KEYCLOAK_INTERNAL_URL: ${KEYCLOAK_INTERNAL_URL:-http://keycloak:8080}
-      OPENCODE_AGENT_CLIENT_ID: ${OPENCODE_AGENT_CLIENT_ID:-opencode-agent}
-      OPENCODE_AGENT_CLIENT_SECRET: ${OPENCODE_AGENT_CLIENT_SECRET:-}
+      # Pre-registered Keycloak public client for MCP OAuth (RFC 9728) as the real user.
+      OPENCODE_MCP_CLIENT_ID: ${OPENCODE_MCP_CLIENT_ID:-opencode-mcp}
     volumes:
       - opencode_data:/root/.config/opencode
+      - opencode_data:/root/.local/share/opencode
       - ./opencode/entrypoint.sh:/entrypoint.sh:ro
     ports:
       - "4096:4096"
     restart: always
     extra_hosts:
       - host.docker.internal:host-gateway
-    depends_on:
-      keycloak:
-        condition: service_healthy
     networks:
       keycloak_network:
         ipv4_address: 172.28.0.5

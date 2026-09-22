@@ -41,8 +41,6 @@ GV_DB_PSWD=
 
 KEYCLOAK_ADMIN=
 KEYCLOAK_ADMIN_PASSWORD=
-
-DEEPSEEK_API_KEY=
 ```
 
 `.env` и `certs/` в `.gitignore` — не коммитьте их.

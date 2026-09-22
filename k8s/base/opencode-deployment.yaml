@@ -22,55 +22,31 @@ spec:
         app.kubernetes.io/name: opencode
         app.kubernetes.io/part-of: gross-view
     spec:
-      # Mirrors docker-compose `depends_on: keycloak: condition: service_healthy`.
-      # k8s has no such mechanism, so an initContainer waits for Keycloak's
-      # /health/ready before the entrypoint tries to obtain the MCP token
-      # (otherwise opencode starts while Keycloak is still building/importing,
-      # the token fetch fails, and MCP stays "unknown").
-      # NOTE: the host here MUST match gross-view-secrets/keycloak_internal_url.
-      initContainers:
-        - name: wait-for-keycloak
-          image: ghcr.io/anomalyco/opencode:latest
-          command:
-            - /bin/sh
-            - -c
-            - |
-              echo "==> waiting for Keycloak readiness (keycloak.gross-view.svc.cluster.local:8080) ..."
-              until wget -q -O /dev/null -T 5 \
-                http://keycloak.gross-view.svc.cluster.local:8080/health/ready; do
-                echo "    keycloak not ready yet; retrying in 3s..."
-                sleep 3
-              done
-              echo "==> Keycloak is ready."
       containers:
         - name: opencode
           image: ghcr.io/anomalyco/opencode:latest
           command: ["/bin/sh", "/entrypoint.sh"]
           env:
-            - name: DEEPSEEK_API_KEY
-              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: deepseek_api_key } }
-            - name: OPENCODE_SERVER_USERNAME
-              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: opencode_server_username } }
-            - name: OPENCODE_SERVER_PASSWORD
-              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: opencode_server_password } }
+            # No server-side auth: the handler→opencode direction passes the real
+            # user's JWT (attribution), not Basic auth — the server runs on the internal
+            # network without its own credentials (gross-view-handler change).
             - name: BROWSER
               value: "none"
             - name: OPENCODE_MCP_URL
               value: "http://gross-view-api.gross-view.svc.cluster.local:8082/api/mcp"
-            - name: OPENCODE_MCP_TOKEN
-              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: opencode_mcp_token, optional: true } }
-            - name: KEYCLOAK_INTERNAL_URL
-              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: keycloak_internal_url } }
-            - name: OPENCODE_AGENT_CLIENT_ID
-              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: opencode_agent_client_id } }
-            - name: OPENCODE_AGENT_CLIENT_SECRET
-              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: opencode_agent_client_secret } }
+            # Pre-registered Keycloak public client for MCP OAuth (RFC 9728) as the real user.
+            - name: OPENCODE_MCP_CLIENT_ID
+              value: "opencode-mcp"
           ports:
             - name: http
               containerPort: 4096
           volumeMounts:
             - name: opencode-data
               mountPath: /root/.config/opencode
+            # OAuth tokens for the gross-view MCP server live in mcp-auth.json under
+            # ~/.local/share/opencode — must be persisted on the same PVC to survive restarts.
+            - name: opencode-data
+              mountPath: /root/.local/share/opencode
             - name: opencode-entrypoint
               mountPath: /entrypoint.sh
               subPath: entrypoint.sh
