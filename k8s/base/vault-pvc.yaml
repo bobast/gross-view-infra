@@ -1,0 +1,18 @@
+# Vault - PersistentVolumeClaim.
+# Holds the file storage backend AND init.json (unseal key + root token). Treat
+# this volume as sensitive: whoever reads it can unseal the vault.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vault-data
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: vault
+    app.kubernetes.io/part-of: gross-view
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: standard

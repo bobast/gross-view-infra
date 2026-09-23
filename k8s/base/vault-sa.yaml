@@ -1,0 +1,39 @@
+# Vault - ServiceAccount + RBAC.
+# Two accounts:
+#   - `vault`                    runs the vault server; needs TokenReview
+#     (system:auth-delegator) because the kubernetes auth method reviews ESO's
+#     ServiceAccount tokens through the K8s API using vault's own pod token.
+#   - `eso-vault-auth`           (future External Secrets) is the IDENTITY bound by
+#     the vault role `eso-role`; no cluster permissions needed by itself.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: vault
+    app.kubernetes.io/part-of: gross-view
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: eso-vault-auth
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/part-of: gross-view
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vault-tokenreview
+  labels:
+    app.kubernetes.io/name: vault
+    app.kubernetes.io/part-of: gross-view
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: vault
+    namespace: gross-view

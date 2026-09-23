@@ -1,0 +1,93 @@
+# Vault - Deployment.
+# Auto-start: the entrypoint (vault-entrypoint ConfigMap) initializes on the first
+# boot and auto-unseals on every boot, so the pod comes up ready without manual
+# `vault operator unseal`. `restartPolicy: Always` + the liveness probe restart a
+# pod that somehow ends up sealed again.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vault
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: vault
+    app.kubernetes.io/part-of: gross-view
+spec:
+  replicas: 1
+  # Keep no old ReplicaSets: obsolete revisions for nonexistent pods are cleaned up.
+  revisionHistoryLimit: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vault
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vault
+        app.kubernetes.io/part-of: gross-view
+    spec:
+      serviceAccountName: vault
+      containers:
+        - name: vault
+          # DockerHub image via the Moscow DC mirror (all DockerHub images go through it).
+          image: dockerhub.timeweb.cloud/hashicorp/vault:1.18.4
+          command: ["/bin/sh", "/vault/entrypoint.sh"]
+          env:
+            - name: VAULT_ADDR
+              value: "http://127.0.0.1:8200"
+            - name: VAULT_CONFIG_FILE
+              value: "/vault/config/vault-config.hcl"
+            - name: VAULT_DATA_DIR
+              value: "/vault/data"
+            - name: ESO_ROLE_NAME
+              value: "eso-role"
+            - name: ESO_BOUND_SA_NAME
+              value: "eso-vault-auth"
+            - name: ESO_BOUND_SA_NAMESPACE
+              value: "gross-view"
+          ports:
+            - name: http
+              containerPort: 8200
+          volumeMounts:
+            - name: vault-data
+              mountPath: /vault/data
+            - name: vault-entrypoint
+              mountPath: /vault/entrypoint.sh
+              subPath: entrypoint.sh
+              readOnly: true
+            - name: vault-entrypoint
+              mountPath: /vault/config/vault-config.hcl
+              subPath: vault-config.hcl
+              readOnly: true
+          # /v1/sys/health returns 429 while sealed (a sealed vault is NOT ready)
+          # and 503 while uninitialized — both fail the probes and trigger a
+          # restart via the liveness probe (bootstrap re-unseals on boot).
+          readinessProbe:
+            httpGet:
+              path: /v1/sys/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /v1/sys/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 512Mi
+      volumes:
+        - name: vault-data
+          persistentVolumeClaim:
+            claimName: vault-data
+        - name: vault-entrypoint
+          configMap:
+            name: vault-entrypoint
+            defaultMode: 0555

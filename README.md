@@ -51,10 +51,10 @@ KEYCLOAK_ADMIN_PASSWORD=
 
 Порядок деплоя:
 
-1. Заполните секреты в `k8s/base/secret.yaml` (замените `changeme` на реальные значения; не коммитьте их).
+1. Установите ESO-оператор (out-of-band, namespace `external-secrets`, server-side apply) — см. note про ESO в AGENTS.md. Без него `kubectl apply -k .` упадёт на неизвестных CRD.
 2. Создайте pull-secret `gross-view-registry` для доступа к реестру контейнеров (или подключите реестр к кластеру в панели Timeweb).
 3. Соберите и запушьте образ посадочной страницы `gross-view.registry.twcstorage.ru/gross-view/gross-view-ui:latest` (манифесты ссылаются на него).
-4. Примените манифесты из корня репозитория — `kubectl apply -k .`.
+4. Примените манифесты из корня репозитория — `kubectl apply -k .`. Vault автозапуском засеет `secret/gross-view` dev-плейсхолдерами, ESO создаст из них Secret `gross-view-secrets`. Реальные значения положите в Vault (например: `kubectl -n gross-view exec deploy/vault -- vault kv put secret/gross-view deepseek_api_key=<REAL>`).
 5. Если менялась nginx-конфигурация (`k8s/base/nginx-configmap.yaml`) — перезапустите nginx, чтобы подобрать новый конфиг.
 6. Выпустите первый Let's Encrypt сертификат для `mint-box.ru`.
 7. Проверьте посадочную страницу.
@@ -102,7 +102,11 @@ kubectl -n gross-view rollout restart deployment/gross-view-ui
 
 Команды выполняются из корня репозитория `gross-view-infra`, если явно не указан другой каталог.
 
-**1. Секреты** — отредактируйте `k8s/base/secret.yaml`, замените `changeme` на реальные значения.
+**1. Секреты** — секретов в манифестах нет, источник истины — Vault. После первого `kubectl apply -k .` Vault сам засеет путь `secret/gross-view` dev-плейсхолдерами, ESO создаст Secret `gross-view-secrets`. Реальные значения записываются в Vault:
+
+```bash
+kubectl -n gross-view exec deploy/vault -- vault kv put secret/gross-view <key>=<REAL_VALUE>
+```
 
 **2. Pull-secret для реестра Timeweb** (токен `registry-...` из панели):
 
@@ -155,7 +159,7 @@ kubectl -n gross-view rollout restart deployment/gross-view-ui
 kubectl -n gross-view rollout restart deployment/nginx
 ```
 
-**10. Первый Let's Encrypt сертификат** (nginx-под не поднимется, пока не создан Secret `mint-box-tls`):
+**10. Первый Let's Encrypt сертификат** (nginx init-контейнер уже создал self-signed placeholder Secret `mint-box-tls`; certbot заменит его на реальный):
 
 ```bash
 kubectl create job --from=cronjob/certbot certbot-bootstrap -n gross-view
@@ -175,7 +179,11 @@ curl -I https://mint-box.ru
 
 В PowerShell `&&` не поддерживается (PowerShell 5.1), поэтому команды выполняются по одной — каждый блок можно копировать отдельно. В PowerShell `curl` — это алиас `Invoke-WebRequest` (для `-I` ведёт себя неверно), используйте `curl.exe`.
 
-**1. Секреты** — отредактируйте `k8s/base/secret.yaml`, замените `changeme` на реальные значения.
+**1. Секреты** — секретов в манифестах нет, источник истины — Vault. После первого `kubectl apply -k .` Vault сам засеет путь `secret/gross-view` dev-плейсхолдерами, ESO создаст Secret `gross-view-secrets`. Реальные значения записываются в Vault:
+
+```bash
+kubectl -n gross-view exec deploy/vault -- vault kv put secret/gross-view <key>=<REAL_VALUE>
+```
 
 **2. Pull-secret для реестра Timeweb** (токен `registry-...` из панели):
 
@@ -237,7 +245,7 @@ kubectl -n gross-view rollout restart deployment/gross-view-ui
 kubectl -n gross-view rollout restart deployment/nginx
 ```
 
-**10. Первый Let's Encrypt сертификат** (nginx-под не поднимется, пока не создан Secret `mint-box-tls`):
+**10. Первый Let's Encrypt сертификат** (nginx init-контейнер уже создал self-signed placeholder Secret `mint-box-tls`; certbot заменит его на реальный):
 
 ```powershell
 kubectl create job --from=cronjob/certbot certbot-bootstrap -n gross-view

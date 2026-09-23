@@ -629,6 +629,105 @@
     "defaultClientScopes" : [ "web-origins", "acr", "openid", "roles", "profile", "email" ],
     "optionalClientScopes" : [ "address", "phone", "offline_access", "microprofile-jwt" ]
   }, {
+    "id" : "8cc9df09-f2b9-4144-b6d2-8c0c1cdee76c",
+    "clientId" : "gross-view-handler-service",
+    "name" : "Gross View Handler backend",
+    "description" : "Confidential client for handler->Keycloak token exchange (per-session MCP connection)",
+    "rootUrl" : "",
+    "adminUrl" : "",
+    "baseUrl" : "",
+    "surrogateAuthRequired" : false,
+    "enabled" : true,
+    "alwaysDisplayInConsole" : false,
+    "clientAuthenticatorType" : "client-secret",
+    "secret" : "changeme-gross-view-handler-service",
+    "redirectUris" : [ ],
+    "webOrigins" : [ ],
+    "notBefore" : 0,
+    "bearerOnly" : false,
+    "consentRequired" : false,
+    "standardFlowEnabled" : false,
+    "implicitFlowEnabled" : false,
+    "directAccessGrantsEnabled" : true,
+    "serviceAccountsEnabled" : true,
+    "publicClient" : false,
+    "frontchannelLogout" : false,
+    "protocol" : "openid-connect",
+    "attributes" : {
+      "access.token.lifespan" : "86400"
+    },
+    "authenticationFlowBindingOverrides" : { },
+    "fullScopeAllowed" : false,
+    "nodeReRegistrationTimeout" : -1,
+    "defaultClientScopes" : [ "web-origins", "acr", "roles", "profile", "email" ],
+    "optionalClientScopes" : [ "address", "phone", "offline_access", "microprofile-jwt" ]
+  }, {
+    "id" : "729922e7-16a5-48d0-bbaf-b0bbb81a850b",
+    "clientId" : "mcp",
+    "name" : "MCP service resource",
+    "description" : "Audience resource for token exchange to the handler MCP service (/api/mcp)",
+    "surrogateAuthRequired" : false,
+    "enabled" : true,
+    "alwaysDisplayInConsole" : false,
+    "clientAuthenticatorType" : "client-secret",
+    "redirectUris" : [ ],
+    "webOrigins" : [ ],
+    "notBefore" : 0,
+    "bearerOnly" : true,
+    "consentRequired" : false,
+    "standardFlowEnabled" : false,
+    "implicitFlowEnabled" : false,
+    "directAccessGrantsEnabled" : false,
+    "serviceAccountsEnabled" : true,
+    "authorizationServicesEnabled" : true,
+    "publicClient" : false,
+    "frontchannelLogout" : false,
+    "protocol" : "openid-connect",
+    "attributes" : { },
+    "authenticationFlowBindingOverrides" : { },
+    "fullScopeAllowed" : false,
+    "nodeReRegistrationTimeout" : -1,
+    "defaultClientScopes" : [ "web-origins", "acr", "roles", "profile", "email" ],
+    "optionalClientScopes" : [ "address", "phone", "offline_access", "microprofile-jwt" ],
+    "authorizationSettings" : {
+      "allowRemoteResourceManagement" : true,
+      "policyEnforcementMode" : "ENFORCING",
+      "decisionStrategy" : "UNANIMOUS",
+      "resources" : [ {
+        "name" : "Default Resource",
+        "type" : "urn:mcp:resources:default",
+        "ownerManagedAccess" : false,
+        "displayName" : "Default Resource",
+        "attributes" : { },
+        "_id" : "729922e7-16a5-48d0-bbaf-b0bbb81a850b",
+        "uris" : [ ]
+      } ],
+      "scopes" : [ {
+        "id" : "37d51bf6-e65e-4f2a-8db5-d956ceb4c36a",
+        "name" : "token-exchange"
+      } ],
+      "policies" : [ {
+        "id" : "e60d6923-4943-4222-9507-aa01120f8c8d",
+        "name" : "gross-view-handler-service exchange",
+        "type" : "client",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "UNANIMOUS",
+        "config" : {
+          "clients" : "[\"8cc9df09-f2b9-4144-b6d2-8c0c1cdee76c\"]"
+        }
+      }, {
+        "id" : "ea1e620e-b925-483d-9df1-36b1374ddfda",
+        "name" : "token-exchange.permission.client.729922e7-16a5-48d0-bbaf-b0bbb81a850b",
+        "type" : "scope",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "UNANIMOUS",
+        "config" : {
+          "scopes" : "[\"token-exchange\"]",
+          "applyPolicies" : "[\"gross-view-handler-service exchange\"]"
+        }
+      } ]
+    }
+  }, {
     "id" : "33d60938-66ea-491f-b91c-26838d00c333",
     "clientId" : "realm-management",
     "name" : "${client_realm-management}",

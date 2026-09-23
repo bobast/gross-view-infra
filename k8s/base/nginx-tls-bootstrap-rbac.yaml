@@ -1,0 +1,43 @@
+# nginx - RBAC for the TLS bootstrap initContainer (see nginx-deployment.yaml).
+# Grants the nginx pod SA the rights to check for and create the `mint-box-tls`
+# Secret (self-signed placeholder) so the pod can start on a fresh cluster
+# before certbot has issued a real Let's Encrypt certificate. certbot then
+# overwrites the Secret and rolls the nginx Deployment.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nginx
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: nginx
+    app.kubernetes.io/part-of: gross-view
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: nginx-tls-bootstrap
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: nginx
+    app.kubernetes.io/part-of: gross-view
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: nginx-tls-bootstrap
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: nginx
+    app.kubernetes.io/part-of: gross-view
+subjects:
+  - kind: ServiceAccount
+    name: nginx
+    namespace: gross-view
+roleRef:
+  kind: Role
+  name: nginx-tls-bootstrap
+  apiGroup: rbac.authorization.k8s.io

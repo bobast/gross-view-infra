@@ -23,7 +23,9 @@ set -e
 #                               (default http://host.docker.internal:8082/api/mcp)
 #   OPENCODE_MCP_CLIENT_ID    - pre-registered Keycloak public client
 #                               (default opencode-mcp)
-#   OPENCODE_MCP_SCOPE        - OAuth scope to request (default openid)
+#   OPENCODE_MCP_SCOPE        - OAuth scope to request
+#                               (default: openid offline_access — offline token survives
+#                               the 30m/10h SSO session; 'openid' alone regresses to needs_auth)
 
 CONFIG_DIR=/root/.config/opencode
 CONFIG_FILE="$CONFIG_DIR/opencode.json"
@@ -33,7 +35,7 @@ SKILL_DIR="$CONFIG_DIR/skills/mcp-first"
 SKILL_FILE="$SKILL_DIR/SKILL.md"
 MCP_URL="${OPENCODE_MCP_URL:-http://host.docker.internal:8082/api/mcp}"
 MCP_CLIENT_ID="${OPENCODE_MCP_CLIENT_ID:-opencode-mcp}"
-MCP_SCOPE="${OPENCODE_MCP_SCOPE:-openid}"
+MCP_SCOPE="${OPENCODE_MCP_SCOPE:-openid offline_access}"
 
 # ---------------------------------------------------------------------------
 # Write opencode.json

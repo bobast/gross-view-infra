@@ -36,7 +36,7 @@ spec:
       containers:
         - name: keycloak
           image: quay.io/keycloak/keycloak:23.0.6
-          args: ["start", "--import-realm"]
+          args: ["start", "--import-realm", "--features=token-exchange"]
           env:
             # Hostname / proxy settings (matching nginx Ingress paths)
             - name: KC_HOSTNAME_URL

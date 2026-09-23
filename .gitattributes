@@ -11,5 +11,12 @@
 k8s/base/opencode-entrypoint-configmap.yaml text eol=lf
 k8s/base/opencode-deployment.yaml text eol=lf
 
+# Vault shares the same pattern: vault/entrypoint.sh must stay byte-identical to
+# data.entrypoint.sh in the vault-entrypoint ConfigMap.
+vault/entrypoint.sh text eol=lf
+vault/vault-config.hcl text eol=lf
+k8s/base/vault-entrypoint-configmap.yaml text eol=lf
+k8s/base/vault-deployment.yaml text eol=lf
+
 # PowerShell scripts keep the native Windows CRLF form.
 *.ps1 text eol=crlf

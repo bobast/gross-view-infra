@@ -2,8 +2,9 @@
 # Mirrors the docker-compose nginx service. Certificates come from the
 # `mint-box-tls` Secret (authored by the certbot CronJob); the HTTP-01 webroot
 # is the shared `certbot-data` PVC so the certbot pod can write challenge files.
-# Bootstrap note: the pod will not start until the `mint-box-tls` Secret exists
-# (run the certbot CronJob once or pre-create the Secret manually).
+# Bootstrap: an initContainer generates a throwaway self-signed cert and creates
+# the `mint-box-tls` Secret if it does not exist yet, so the pod starts even on
+# a fresh cluster before certbot has issued a real Let's Encrypt certificate.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -25,6 +26,57 @@ spec:
         app.kubernetes.io/name: nginx
         app.kubernetes.io/part-of: gross-view
     spec:
+      serviceAccountName: nginx
+      initContainers:
+        - name: tls-bootstrap-generate
+          image: dockerhub.timeweb.cloud/library/alpine:3.20
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              apk add --no-cache openssl >/dev/null
+              openssl req -x509 -newkey rsa:2048 -nodes \
+                -keyout /shared/tls.key -out /shared/tls.crt \
+                -days 825 -subj "/CN=mint-box.ru" \
+                -addext "subjectAltName=DNS:mint-box.ru"
+          resources:
+            # `apk add` needs headroom above a tight 32Mi limit (was OOMKilled).
+            # Init containers exit after bootstrap, so this does not add to the
+            # steady-state memory footprint of the pod.
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+            - name: tls-bootstrap
+              mountPath: /shared
+        - name: tls-bootstrap-provider
+          image: dockerhub.timeweb.cloud/lachlanevenson/k8s-kubectl:latest
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              if kubectl get secret mint-box-tls -n gross-view >/dev/null 2>&1; then
+                echo "mint-box-tls already exists - skipping self-signed bootstrap"
+                exit 0
+              fi
+              kubectl create secret tls mint-box-tls \
+                --cert=/shared/tls.crt --key=/shared/tls.key \
+                -n gross-view
+          resources:
+            requests:
+              cpu: 10m
+              memory: 8Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+          volumeMounts:
+            - name: tls-bootstrap
+              mountPath: /shared
       containers:
         - name: nginx
           image: dockerhub.timeweb.cloud/library/nginx:stable-alpine
@@ -80,3 +132,5 @@ spec:
         - name: certbot-data
           persistentVolumeClaim:
             claimName: certbot-data
+        - name: tls-bootstrap
+          emptyDir: {}

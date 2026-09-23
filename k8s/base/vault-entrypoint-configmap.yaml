@@ -1,0 +1,195 @@
+# Vault auto-start bootstrap ConfigMap.
+# data.entrypoint.sh MUST stay byte-identical to vault/entrypoint.sh (docker);
+# data.vault-config.hcl to vault/vault-config.hcl. This file is pinned to LF
+# (see .gitattributes) — a CRLF breaks BusyBox ash inside the container.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-entrypoint
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: vault
+    app.kubernetes.io/part-of: gross-view
+data:
+  vault-config.hcl: |
+    # Vault server configuration — shared by docker-compose and K8s.
+    # Keep in sync with vault/vault-config.hcl (docker).
+    storage "file" {
+      path = "/vault/data"
+    }
+
+    listener "tcp" {
+      address     = "0.0.0.0:8200"
+      tls_disable = 1
+    }
+
+    api_addr      = "http://127.0.0.1:8200"
+    disable_mlock = true
+    ui            = true
+  entrypoint.sh: |
+    #!/bin/sh
+    # Vault auto-start bootstrap — shared by docker-compose and K8s.
+    #
+    # The vault server starts sealed; this wrapper removes every manual step so the
+    # container comes up ready on its own (`restart: always` / Deployment restartPolicy):
+    #   1. starts `vault server` in the background;
+    #   2. awaits the API;
+    #   3. on the FIRST boot runs `vault operator init` (1 share, threshold 1) and stores
+    #      init.json (unseal key + root token) on the data volume;
+    #   4. on EVERY boot unseals if sealed and (idempotently) provisions:
+    #        - secret engine  secret/            (KV v2)
+    #        - policy         eso-policy         (read/list for External Secrets)
+    #        - bootstrap secret/data/gross-view  (dev placeholder values, written ONLY
+    #          when the path is absent — this is the source the ExternalSecret syncs
+    #          from, so a fresh cluster gets `gross-view-secrets` with zero manual steps)
+    #        - if running inside a pod (SA token present): Kubernetes auth method +
+    #          role `eso-role` bound to the ESO ServiceAccount (see docs/ESO-vault-k8s.md)
+    #   5. keeps the server in the foreground so PID-1 signal handling stays sane.
+    #
+    # Requires: VAULT_ADDR, VAULT_CONFIG_FILE, VAULT_DATA_DIR (see deployment/compose).
+    # Keep this file and k8s/base/vault-entrypoint-configmap.yaml data.entrypoint.sh
+    # byte-identical (LF only — a CRLF breaks BusyBox ash with `set: illegal option -`).
+
+    set -e
+
+    export VAULT_ADDR="${VAULT_ADDR:-http://127.0.0.1:8200}"
+    CONFIG="${VAULT_CONFIG_FILE:-/vault/config/vault-config.hcl}"
+    DATA_DIR="${VAULT_DATA_DIR:-/vault/data}"
+    INIT_FILE="$DATA_DIR/init.json"
+
+    echo "[vault-entrypoint] starting vault server (config: $CONFIG)"
+    vault server -config="$CONFIG" &
+    VAULT_PID=$!
+    trap 'kill -TERM "$VAULT_PID" 2>/dev/null || true' INT TERM
+
+    echo "[vault-entrypoint] waiting for the vault API..."
+    i=0
+    rc=0
+    while [ "$i" -lt 60 ]; do
+      # vault status exit codes: 0 = unsealed, 2 = API is up (uninitialized OR
+      # sealed), 1 = API unreachable (connection refused). `|| rc=$?` keeps `set -e`
+      # from killing the loop on the expected non-zero codes.
+      rc=0
+      vault status >/dev/null 2>&1 || rc=$?
+      if [ "$rc" -eq 0 ] || [ "$rc" -eq 2 ]; then
+        break
+      fi
+      i=$((i + 1))
+      sleep 1
+    done
+    if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then
+      echo "[vault-entrypoint] vault API did not come up in time" >&2
+      exit 1
+    fi
+
+    STATUS_JSON="$(vault status -format=json 2>/dev/null || true)"
+
+    if printf '%s' "$STATUS_JSON" | grep -q '"initialized": false'; then
+      echo "[vault-entrypoint] first boot: initializing vault (1 share, threshold 1)"
+      vault operator init -key-shares=1 -key-threshold=1 -format=json > "$INIT_FILE"
+      STATUS_JSON="$(vault status -format=json 2>/dev/null || true)"
+    fi
+
+    if printf '%s' "$STATUS_JSON" | grep -q '"sealed": true'; then
+      echo "[vault-entrypoint] unsealing vault"
+      # init.json is pretty-printed (the b64 key sits on the line AFTER the
+      # "unseal_keys_b64": [ header), so pull the following line and strip quotes.
+      UNSEAL_KEY="$(awk '/unseal_keys_b64/ {getline; gsub(/[", ]/, "", $0); print; exit}' "$INIT_FILE")"
+      if [ -z "$UNSEAL_KEY" ]; then
+        echo "[vault-entrypoint] unseal key not found in $INIT_FILE — recover manually" >&2
+        exit 1
+      fi
+      vault operator unseal "$UNSEAL_KEY" >/dev/null
+    fi
+
+    ROOT_TOKEN="$(sed -n 's/.*"root_token": *"\([^"]*\)".*/\1/p' "$INIT_FILE")"
+    if [ -z "$ROOT_TOKEN" ]; then
+      echo "[vault-entrypoint] root token not found in $INIT_FILE — recover manually" >&2
+      exit 1
+    fi
+    export VAULT_TOKEN="$ROOT_TOKEN"
+
+    echo "[vault-entrypoint] provisioning (idempotent)"
+    if vault secrets list -format=json 2>/dev/null | grep -q '"secret/"'; then
+      echo "[vault-entrypoint]   secret engine 'secret/' exists"
+    else
+      vault secrets enable -path=secret kv-v2 >/dev/null
+    fi
+
+    vault policy write eso-policy - >/dev/null <<'POLICY'
+    path "secret/data/*" {
+      capabilities = ["read", "list"]
+    }
+    path "secret/metadata/*" {
+      capabilities = ["read", "list"]
+    }
+    POLICY
+    echo "[vault-entrypoint]   policy 'eso-policy' written"
+
+    # Kubernetes auth is only useful inside a real pod (has the SA token file).
+    # In docker-compose there is no K8s, so this block is skipped automatically.
+    if [ -f /var/run/secrets/kubernetes.io/serviceaccount/token ]; then
+      echo "[vault-entrypoint]   pod detected: configuring Kubernetes auth"
+      if ! vault auth list -format=json 2>/dev/null | grep -q '"kubernetes/"'; then
+        vault auth enable kubernetes >/dev/null
+        vault write auth/kubernetes/config \
+          kubernetes_host="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS:-443}" \
+          >/dev/null
+      fi
+      vault write "auth/kubernetes/role/${ESO_ROLE_NAME:-eso-role}" \
+        bound_service_account_names="${ESO_BOUND_SA_NAME:-eso-vault-auth}" \
+        bound_service_account_namespaces="${ESO_BOUND_SA_NAMESPACE:-gross-view}" \
+        policies=eso-policy \
+        ttl=1h >/dev/null
+      echo "[vault-entrypoint]   kubernetes auth role '${ESO_ROLE_NAME:-eso-role}' written"
+    else
+      echo "[vault-entrypoint]   no K8s SA token — skipping Kubernetes auth (docker)"
+    fi
+
+    # Bootstrap data for the ExternalSecret: without `secret/gross-view` ESO would
+    # have nothing to sync on a fresh cluster, so workloads reading the
+    # `gross-view-secrets` Secret (owner-created by ESO) could never start. Values
+    # are written only when the path is absent — never overwrites real data. This
+    # replaces the deleted k8s/base/secret.yaml bootstrap Secret.
+    if ! vault kv metadata get secret/gross-view >/dev/null 2>&1; then
+      echo "[vault-entrypoint]   seeding bootstrap secret/data/gross-view for ESO"
+      SEED_FILE="$(mktemp)"
+      cat > "$SEED_FILE" <<'SEED'
+      {
+      "anthropic_api_key": "changeme",
+      "deepseek_api_key": "REPLACE_WITH_DEEPSEEK_API_KEY",
+      "gv_db_name": "gross_view",
+      "gv_db_password": "*Eg3#433@jzHeE",
+      "gv_db_user": "gv_dba_user",
+      "kc_db_name": "keycloak",
+      "kc_db_password": "72mR@#3R@Tws9N",
+      "kc_db_user": "kc_dba_user",
+      "keycloak_admin": "kc_owner",
+      "keycloak_admin_password": "#k*d@rt434wKpZ",
+      "keycloak_internal_url": "http://keycloak.gross-view.svc.cluster.local:8080",
+      "n8n_db_name": "n8n",
+      "n8n_db_password": "change_me",
+      "n8n_db_user": "change_me",
+      "n8n_encryption_key": "change_me",
+      "opencode_agent_client_id": "opencode-agent",
+      "opencode_agent_client_secret": "changeme-opencode-agent",
+      "opencode_password": "changeme",
+      "opencode_server_password": "change_me",
+      "opencode_server_username": "opencode",
+      "postgres_db": "postgres",
+      "postgres_password": "Zf3tXQ%Yc^7K*T",
+      "postgres_user": "change_me",
+      "wg_internal_subnet": "10.13.13.0",
+      "wg_peer_dns": "172.28.0.8",
+      "wg_peers": "5",
+      "wg_serverurl": "auto"
+      }
+    SEED
+      vault kv put secret/gross-view "@$SEED_FILE" >/dev/null
+      rm -f "$SEED_FILE"
+    else
+      echo "[vault-entrypoint]   secret/data/gross-view already exists (leaving untouched)"
+    fi
+
+    echo "[vault-entrypoint] ready; keeping vault server in the foreground"
+    wait "$VAULT_PID"

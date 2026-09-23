@@ -9,7 +9,6 @@ namespace: gross-view
 resources:
   - namespace.yaml
   - storageclass.yaml
-  - secret.yaml
   - postgres-init-configmap.yaml
   - postgres-service.yaml
   - postgres-statefulset.yaml
@@ -20,19 +19,31 @@ resources:
   - nginx-service.yaml
   - gross-view-ui-deployment.yaml
   - gross-view-ui-service.yaml
+  - vault-sa.yaml
+  - vault-pvc.yaml
+  - vault-deployment.yaml
+  - vault-service.yaml
+  - vault-entrypoint-configmap.yaml
+  # ESO (external-secrets operator) integration with Vault. The operator itself
+  # is installed out-of-band (release bundle) into namespace `external-secrets`;
+  # here live the provider config (ClusterSecretStore) and the secret source
+  # (ExternalSecret backing `gross-view-secrets` from Vault path secret/gross-view).
+  - eso-clustersecretstore.yaml
+  - eso-externalsecret.yaml
 #  - opencode-deployment.yaml
 #  - opencode-service.yaml
 #  - opencode-pvc.yaml
   - certbot-pvc.yaml
   - certbot-rbac.yaml
   - certbot-cronjob.yaml
-  # tls-secret.yaml is NOT listed: the `mint-box-tls` Secret holds the real
-  # Let's Encrypt cert once certbot has run, and is maintained by the certbot
-  # CronJob. The static bootstrap placeholder (empty data) would invalidate the
-  # Secret / clobber the real cert if applied via kustomize. To bootstrap a
-  # fresh cluster before certbot runs, apply tls-secret.yaml manually first:
-  #   kubectl apply -f k8s/base/tls-secret.yaml -n gross-view
-  #   # or run: kubectl -n gross-view create job --from=cronjob/certbot certbot-bootstrap
+  - nginx-tls-bootstrap-rbac.yaml
+  # There is NO secret.yaml: `gross-view-secrets` is managed purely by the
+  # ExternalSecret (owner-created from Vault secret/data/gross-view, which the
+  # vault entrypoint seeds with dev placeholders on a fresh cluster).
+  # There is also NO tls-secret.yaml: the `mint-box-tls` Secret lives only in
+  # the cluster. If it does not exist, the nginx Deployment's initContainer
+  # generates a throwaway self-signed cert and creates it; the certbot CronJob
+  # then replaces it with the real Let's Encrypt certificate.
   # ingress.yaml is intentionally NOT listed: the nginx Deployment + Service now
   # terminate TLS and are the entry point. Keep ingress.yaml for reference when
   # switching back to ingress-nginx (it would conflict on node ports 80/443).

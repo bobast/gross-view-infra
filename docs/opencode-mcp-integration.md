@@ -110,26 +110,43 @@ opencode mcp auth gross-view   # браузер -> Keycloak -> callback 127.0.0.
 Realm-роль `MCP` на пользователе обязательна (или legacy
 `DESIGNER`/`OZON_IMPORT`).
 
-### 3.3 v2 (направление, не входит в текущий план реализации)
+### 3.3 v2 (реализовано) — per-(пользователь, workspace) MCP-подключение
 
-- Handler при создании сессии для пользователя должен подставлять в конфиг
-  MCP-сервера агента user-токен (или Keycloak token-exchange/impersonation),
-  чтобы `initialize` биндил workspace конкретного пользователя. Для этого нужен
-  конфиденциальный клиент с правом token-exchange и/или per-session перезапись
-  `/mcp` конфига opencode. См. §12.12 AGENTS.md handler-а («Workspace-Scoped
-  Sessions»).
+Реализовано на стороне handler-а (`McpSessionCredentialService`, см.
+`sketches/descriptions/opencode_session_mcp_connection.md`): для пары
+«пользователь + workspace» динамически регистрируется MCP-сервер на агенте
+(`gross-view-<workspaceId>-<userHash>`) через `POST /mcp` с заголовками
+`Authorization: Bearer <mcp-jwt>` и `X-Workspace-Id`. MCP-токен выпускается
+**Keycloak Token Exchange (RFC 8693)** с `audience = mcp` (фолбэк — access-токен
+пользователя; управляется env handler-а `OPENCODE_MCP_TOKEN_EXCHANGE`).
+
+**Требования к инфраструктуре (выполнено):**
+
+1. **Keycloak** — включить feature Token Exchange: `--features=token-exchange`
+   (`docker-compose.yml` → `command: start --import-realm --features=token-exchange`;
+   `k8s/base/keycloak-deployment.yaml` → `args`).
+2. **Realm** (`gross-view-realm.json`):
+   - конфиденциальный клиент `gross-view-handler-service` (service account,
+     `publicClient: false`) — им handler аутентифицируется при exchange;
+   - клиент-ресурс `mcp` (`bearerOnly`, `authorizationServicesEnabled`) — audience
+     для exchange; на нём выдан scope `token-exchange` клиенту
+     `gross-view-handler-service` (client policy).
+3. **Handler** — `keycloak.client-id`/`client-secret` указывают на
+   `gross-view-handler-service` (env `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET`).
+   В `gross-view-handler` (публичный SPA-клиент) обмен невозможен — Token Exchange
+   требует конфиденциальный клиент.
 
 ## 4. Доработки Docker (реализовано)
 
 | Файл | Изменение |
 |---|---|
-| `docker-compose.yml` | opencode: `OPENCODE_MCP_URL` + `OPENCODE_MCP_CLIENT_ID` (публичный клиент); объём `opencode-data` смонтирован в `/root/.config/opencode` **и** `/root/.local/share/opencode` (OAuth-tokens); **серверных credentials нет**, `depends_on: keycloak` удалён (entrypoint Keycloak не вызывает) |
+| `docker-compose.yml` | opencode: `OPENCODE_MCP_URL` + `OPENCODE_MCP_CLIENT_ID` (публичный клиент); LLM-ключ — env `DEEPSEEK_API_KEY` (проброс из `.env`, см. §4.4); объём `opencode-data` смонтирован в `/root/.config/opencode` **и** `/root/.local/share/opencode` (OAuth-tokens); `depends_on: keycloak` удалён (entrypoint Keycloak не вызывает) |
 | `nginx/gross-view.local.conf` | upstream `/api/` — `host.docker.internal:8082` (handler на хосте, см. ниже) |
 | `handler/entrypoint.sh` | импорт self-signed `certs/gross-view.local.crt` в JVM-cacerts (для Nimbus JWKS по `https://gross-view.local/sso/...`) |
 | `opencode/entrypoint.sh` | генерирует `/root/.config/opencode/opencode.json` (remote MCP + `oauth` публичного клиента `opencode-mcp`); **без** авто-генерации токена |
 | `scripts/get-opencode-mcp-token.ps1` | **удалён** (client_credentials не используется) |
-| `.env.example` | открытые переменные: `OPENCODE_MCP_URL`, `OPENCODE_MCP_CLIENT_ID`, `OPENCODE_MCP_SCOPE`, `OPENCODE_DEFAULT_MODEL`, `OPENCODE_CATALOG_CREATE_MISSING`; удалены `OPENCODE_SERVER_USERNAME/PASSWORD`, `OPENCODE_PASSWORD`, `OPENCODE_MCP_TOKEN`, `KEYCLOAK_INTERNAL_URL`, `OPENCODE_AGENT_CLIENT_ID/SECRET`, `OPENCODE_TOKEN_MAX_ATTEMPTS` |
-| `gross-view-realm.json` | realm-роли `MCP`/`ANALYST`/`ADMIN`; публичный клиент `opencode-mcp` (OAuth для opencode); **клиент `opencode-agent` + сервис-аккаунт удалены** |
+| `.env.example` | открытые переменные: `OPENCODE_MCP_URL`, `OPENCODE_MCP_CLIENT_ID`, `OPENCODE_MCP_SCOPE`, `OPENCODE_DEFAULT_MODEL`, `OPENCODE_CATALOG_CREATE_MISSING`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET` (Token Exchange); удалены `OPENCODE_SERVER_USERNAME/PASSWORD`, `OPENCODE_PASSWORD`, `OPENCODE_MCP_TOKEN`, `KEYCLOAK_INTERNAL_URL`, `OPENCODE_AGENT_CLIENT_ID/SECRET`, `OPENCODE_TOKEN_MAX_ATTEMPTS` |
+| `gross-view-realm.json` | realm-роли `MCP`/`ANALYST`/`ADMIN`; публичный клиент `opencode-mcp` (OAuth для opencode); конфиденциальный клиент `gross-view-handler-service` (Token Exchange) + клиент-ресурс `mcp` (audience, scope `token-exchange`); **клиент `opencode-agent` + сервис-аккаунт удалены** |
 | `gross-view-handler` (соседний репозиторий) | Feign-клиент OpenCode: **сквозной JWT пользователя вместо HTTP Basic**; серверного пароля у handler-а нет |
 
 > **handler в docker-compose отсутствует** — backend `gross-view-handler`
@@ -154,7 +171,7 @@ docker compose exec opencode opencode mcp list   # gross-view -> connected
 ```
 OPENCODE_MCP_URL=http://host.docker.internal:8082/api/mcp  # адрес MCP для агента
 OPENCODE_MCP_CLIENT_ID=opencode-mcp   # публичный Keycloak-клиент (OAuth PKCE)
-OPENCODE_MCP_SCOPE=openid             # scope, запрашиваемый у Keycloak
+OPENCODE_MCP_SCOPE=openid offline_access  # offline-токен (30дн idle); 'openid' → needs_auth
 CREDENTIAL_ENCRYPTION_KEY=<32-байтовый base64> # handler падает без него (fail-fast)
 ```
 
@@ -214,14 +231,22 @@ KC=/opt/keycloak/bin/kcadm.sh   # внутри контейнера keycloak
 > тот же throughput (Feign сервера opencode) — минимальных прав не требует; ключи
 > провайдеров лежат в persistent volume opencode (см. §4.4).
 
-### 4.4 Управление провайдерами и их ключами (handler REST API)
+### 4.4 Управление провайдерами и их ключами
 
-Начиная со стадии «управление провайдерами» handler предоставляет REST-эндпоинты
-для подключения провайдеров моделей **в рантайме** (UI/API). Ключи доступа к
-языковым моделям в инфраструктуре не хранятся (env `DEEPSEEK_API_KEY` и
-`gross-view-secrets/deepseek_api_key` удалены): провайдер подключается один раз
-через API/UI handler-а, и ключ сохраняется в конфиг-директории сервера
-opencode:
+**Основной механизм поступления LLM-ключей — переменные окружения контейнера**
+opencode (провайдеры сервера читают их напрямую как учётные данные). Для DeepSeek
+`DEEPSEEK_API_KEY` пробрасывается из `.env` инфраструктуры через `docker-compose.yml`
+(`environment: DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}`); `.env.example` содержит
+заглушку. После изменения ключа контейнер пересоздаётся:
+
+```bash
+docker compose up -d opencode
+docker compose exec opencode printenv DEEPSEEK_API_KEY   # контроль
+```
+
+Handler дополнительно предоставляет REST-эндпоинты для подключения провайдеров
+моделей **в рантайме** (UI/API) — используются как альтернатива env, когда ключ
+меняется без пересоздания контейнера или провайдер подключён через OAuth:
 
 - `POST /api/opencode/providers/{id}/connect` — подключение API-ключом
   (`PUT /auth/{id}` на сервере opencode, ключ хранится в конфиг-директории
@@ -236,9 +261,11 @@ opencode:
 Инфраструктурных требований это не добавляет: все вызовы идут через Feign handler-а
 (со сквозным JWT пользователя) к внутреннему адресу opencode
 (`opencode:4096` / `opencode.gross-view.svc.cluster.local:4096`) и не требуют
-новых Secret-ов. Ключи провайдеров, заведённые через этот механизм, лежат в
+новых Secret-ов. Ключи провайдеров, заведённые через runtime-механизм, лежат в
 persistent volume (PVC/volume opencode-data) и переживают перезапуск контейнера;
-учитывать при бэкапе этого volume.
+учитывать при бэкапе этого volume. Ключи через env (`DEEPSEEK_API_KEY`)
+переживают перезапуски по определению и не попадают в volume — их источник —
+`.env`/Secret инфраструктуры.
 
 ## 6. План доработок K8s (реализовано, применять при постановке API-деплоя)
 
@@ -262,7 +289,7 @@ persistent volume (PVC/volume opencode-data) и переживают перез�
    манифестами API).
 4. **`opencode-deployment.yaml`**: ✅ сделано — `initContainer wait-for-keycloak`
    **удалён** (entrypoint больше не получает токен → Keycloak при старте не нужен);
-   env без серверных credentials: `BROWSER=none`, `OPENCODE_MCP_URL`
+   env без OAuth-credentials (только LLM-ключ `DEEPSEEK_API_KEY` + MCP-конфиг): `BROWSER=none`, `OPENCODE_MCP_URL`
    (`http://gross-view-api…:8082/api/mcp`), `OPENCODE_MCP_CLIENT_ID=opencode-mcp`;
    entrypoint монтируется из ConfigMap `opencode-entrypoint`
    (`opencode-entrypoint-configmap.yaml`, `defaultMode: 0555`, скрипт синхронизирован
@@ -273,9 +300,11 @@ persistent volume (PVC/volume opencode-data) и переживают перез�
    `opencode-data`. Периодическое обновление Secret не нужно. При логине другого
    пользователя — повторить OAuth (или удалить `mcp-auth.json`).
 6. **Realm** (общий с docker): роли `MCP`/`ANALYST`/`ADMIN`, публичный клиент
-   `opencode-mcp` — импортируются свежим `mint-box.ru` realm-импортом; на
-   работающих кластерах — kcadm (см. §4.3). Легаси `opencode-agent`/сервис-аккаунт
-   удалены из импорта.
+   `opencode-mcp`, конфиденциальный `gross-view-handler-service` + клиент-ресурс
+   `mcp` (audience Token Exchange) — импортируются свежим `mint-box.ru`
+   realm-импортом; на работающих кластерах — kcadm (см. §4.3). Легаси
+   `opencode-agent`/сервис-аккаунт удалены из импорта. Keycloak запускается с
+   `--features=token-exchange` (`keycloak-deployment.yaml` → `args`).
 7. **Бюджет ресурсов**: handler ≈ 200m CPU / 300–400Mi RAM requests. Ориентир узла
    `~800m / ~1500Mi` будет превышен — поднять узел до 2 CPU или пересмотреть limits.
 8. Обновить AGENTS.md (расписание сервисов, таблица ресурсов).

@@ -29,7 +29,7 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:23.0.6
-    command: start --import-realm
+    command: start --import-realm --features=token-exchange
     environment:
       KC_HOSTNAME_URL: https://gross-view.local/sso
       KC_HOSTNAME_ADMIN_URL: https://gross-view.local/sso
@@ -87,26 +87,77 @@ services:
       # user's JWT (attribution), not Basic auth — the server runs on the internal
       # network without its own credentials (gross-view-handler change).
       BROWSER: "none"
+      # LLM provider keys come from the environment (no auth.json / /connect needed):
+      # the opencode server reads DEEPSEEK_API_KEY etc. directly as provider credentials.
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       OPENCODE_MCP_URL: ${OPENCODE_MCP_URL:-http://host.docker.internal:8082/api/mcp}
       # Pre-registered Keycloak public client for MCP OAuth (RFC 9728) as the real user.
       OPENCODE_MCP_CLIENT_ID: ${OPENCODE_MCP_CLIENT_ID:-opencode-mcp}
+      # Request offline tokens: the realm SSO session idles out after 30m (max 10h),
+      # but the offline session lives 30 days without a max lifespan — refresh will
+      # survive long periods of agent idle instead of dropping back to needs_auth.
+      OPENCODE_MCP_SCOPE: ${OPENCODE_MCP_SCOPE:-openid offline_access}
+      # nginx terminates TLS for gross-view.local with a self-signed cert; the agent
+      # must trust it to fetch the MCP resource metadata and reach Keycloak over https
+      # when running the OAuth flow.
+      NODE_EXTRA_CA_CERTS: /etc/ssl/gross-view.local.crt
     volumes:
       - opencode_data:/root/.config/opencode
       - opencode_data:/root/.local/share/opencode
       - ./opencode/entrypoint.sh:/entrypoint.sh:ro
+      # Self-signed nginx cert for gross-view.local (consumed via NODE_EXTRA_CA_CERTS).
+      - ./certs/gross-view.local.crt:/etc/ssl/gross-view.local.crt:ro
     ports:
       - "4096:4096"
+      # OAuth (RFC 9728) callback port: Keycloak redirects the browser to
+      # http://127.0.0.1:19876/mcp/oauth/callback — the host loopback must forward
+      # to the opencode container for `opencode mcp auth gross-view` to complete.
+      - "127.0.0.1:19876:19876"
     restart: always
     extra_hosts:
+      # gross-view.local must reach the nginx proxy (TLS termination): inside the
+      # container the name otherwise resolves to its own loopback (127.0.0.1) and the
+      # MCP resource-metadata / Keycloak endpoints become unreachable.
+      - gross-view.local:172.28.0.4
       - host.docker.internal:host-gateway
     networks:
       keycloak_network:
         ipv4_address: 172.28.0.5
 
+  vault:
+    image: hashicorp/vault:1.18.4
+    entrypoint: ["/bin/sh", "/vault/entrypoint.sh"]
+    environment:
+      VAULT_ADDR: http://127.0.0.1:8200
+      VAULT_CONFIG_FILE: /vault/config/vault-config.hcl
+      VAULT_DATA_DIR: /vault/data
+      # Kubernetes-auth role config (used only inside a real pod; inert in docker).
+      ESO_ROLE_NAME: eso-role
+      ESO_BOUND_SA_NAME: eso-vault-auth
+      ESO_BOUND_SA_NAMESPACE: gross-view
+    volumes:
+      # Auto-start bootstrap: init on first boot, auto-unseal on every boot.
+      - ./vault/entrypoint.sh:/vault/entrypoint.sh:ro
+      - ./vault/vault-config.hcl:/vault/config/vault-config.hcl:ro
+      # init.json (unseal key + root token) persists here; keep the volume safe.
+      - vault_data:/vault/data
+    networks:
+      keycloak_network:
+        ipv4_address: 172.28.0.6
+    restart: always
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 5s
+
 volumes:
   postgres_data:
     driver: local
   opencode_data:
+    driver: local
+  vault_data:
     driver: local
 
 networks:
