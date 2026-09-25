@@ -30,30 +30,25 @@ spec:
             # No server-side auth: the handler→opencode direction passes the real
             # user's JWT (attribution), not Basic auth — the server runs on the internal
             # network without its own credentials (gross-view-handler change).
+            # MCP servers are NOT configured statically: for each session the handler
+            # registers an isolated server (gross-view-<ws>-<userHash>-<sessionHash>)
+            # via POST /mcp (Authorization: Bearer <mcp-jwt> + X-Workspace-Id) and
+            # tears it down with DELETE /mcp on session end. The static shared OAuth
+            # server (OPENCODE_MCP_URL/CLIENT_ID/SCOPE) was removed 2026-09-24.
             - name: BROWSER
               value: "none"
             # LLM provider key (DeepSeek); the opencode server reads it directly as
             # provider credentials (matches docker-compose DEEPSEEK_API_KEY passthrough).
             - name: DEEPSEEK_API_KEY
               valueFrom: { secretKeyRef: { name: gross-view-secrets, key: deepseek_api_key } }
-            - name: OPENCODE_MCP_URL
-              value: "http://gross-view-api.gross-view.svc.cluster.local:8082/api/mcp"
-            # Pre-registered Keycloak public client for MCP OAuth (RFC 9728) as the real user.
-            - name: OPENCODE_MCP_CLIENT_ID
-              value: "opencode-mcp"
-            # Request offline tokens: the realm SSO session idles out after 30m (max 10h),
-            # but the offline session lives 30 days without a max lifespan — refresh will
-            # survive long periods of agent idle instead of dropping back to needs_auth.
-            - name: OPENCODE_MCP_SCOPE
-              value: "openid offline_access"
           ports:
             - name: http
               containerPort: 4096
           volumeMounts:
             - name: opencode-data
               mountPath: /root/.config/opencode
-            # OAuth tokens for the gross-view MCP server live in mcp-auth.json under
-            # ~/.local/share/opencode — must be persisted on the same PVC to survive restarts.
+            # opencode runtime data (~/.local/share/opencode: sleep data, models, optional
+            # local-CLI mcp-auth.json) — must be persisted on the same PVC to survive restarts.
             - name: opencode-data
               mountPath: /root/.local/share/opencode
             - name: opencode-entrypoint

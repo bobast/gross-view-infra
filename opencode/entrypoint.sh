@@ -2,30 +2,24 @@
 set -e
 
 # opencode entrypoint (docker-compose / k8s).
-# Registers the gross-view MCP server for the deployed agent by rendering
-# /root/.config/opencode/opencode.json and generates the mcp-first agent and
-# skill, then execs `opencode web`.
+# Generates the mcp-first agent and skill reference, writes
+# /root/.config/opencode/opencode.json, then execs `opencode web`.
 #
-# MCP authentication — OAuth 2.0 (RFC 9728) as the REAL user, not a shared
-# service-account token: the handler's /api/mcp answers 401 with a
-# WWW-Authenticate Bearer resource_metadata header, opencode starts the
-# authorization-code flow (PKCE) against the pre-registered public Keycloak
-# client and stores the resulting tokens in mcp-auth.json. No secret is shared
-# between handler and agent anymore.
+# MCP-подключение агента к MCP-сервису handler-а (/api/mcp) НЕ настраивается здесь
+# статично. Каждая сессия пользователя получает СОБСТВЕННЫЙ изолированный
+# MCP-сервер, который динамически регистрирует gross-view-handler через
+# POST /mcp с заголовками:
+#   Authorization: Bearer <mcp-jwt>
+#   X-Workspace-Id: <workspaceId>
+# (<mcp-jwt> выпускается handler-ом по токену из заголовка запроса пользователя —
+# Keycloak Token Exchange RFC 8693, audience=mcp). Имя сервера детерминировано
+# сессией: gross-view-<workspaceId>-<userHash>-<sessionHash>. При завершении сессии
+# handler снимает подключение (DELETE /mcp, best-effort).
 #
-# One-time activation (headless: BROWSER=none prints the authorization URL):
-#   opencode mcp auth gross-view
-# Tokens are persisted on the opencode data volume (mounted at
-# /root/.local/share/opencode) and survive container restarts.
-#
-# Environment variables:
-#   OPENCODE_MCP_URL          - handler MCP endpoint
-#                               (default http://host.docker.internal:8082/api/mcp)
-#   OPENCODE_MCP_CLIENT_ID    - pre-registered Keycloak public client
-#                               (default opencode-mcp)
-#   OPENCODE_MCP_SCOPE        - OAuth scope to request
-#                               (default: openid offline_access — offline token survives
-#                               the 30m/10h SSO session; 'openid' alone regresses to needs_auth)
+# Статичного общего OAuth-сервера (opencode mcp auth gross-view) у развёрнутого
+# агента БОЛЬШЕ НЕТ — общий shared-контур нарушал изоляцию сессий. Локальный CLI
+# пользователя по-прежнему может подключаться вручную через свой opencode.json
+# (публичный Keycloak-клиент opencode-mcp и callback 127.0.0.1:19876 сохранены).
 
 CONFIG_DIR=/root/.config/opencode
 CONFIG_FILE="$CONFIG_DIR/opencode.json"
@@ -33,9 +27,6 @@ AGENT_DIR="$CONFIG_DIR/agent"
 AGENT_FILE="$AGENT_DIR/mcp-first.md"
 SKILL_DIR="$CONFIG_DIR/skills/mcp-first"
 SKILL_FILE="$SKILL_DIR/SKILL.md"
-MCP_URL="${OPENCODE_MCP_URL:-http://host.docker.internal:8082/api/mcp}"
-MCP_CLIENT_ID="${OPENCODE_MCP_CLIENT_ID:-opencode-mcp}"
-MCP_SCOPE="${OPENCODE_MCP_SCOPE:-openid offline_access}"
 
 # ---------------------------------------------------------------------------
 # Write opencode.json
@@ -51,20 +42,10 @@ fi
 cat > "$CONFIG_FILE" <<EOF
 {
   "\$schema": "https://opencode.ai/config.json",
-  "default_agent": "mcp-first",
-  "mcp": {
-    "gross-view": {
-      "type": "remote",
-      "url": "$MCP_URL",
-      "oauth": {
-        "clientId": "$MCP_CLIENT_ID",
-        "scope": "$MCP_SCOPE"
-      }
-    }
-  }
+  "default_agent": "mcp-first"
 }
 EOF
-echo "==> gross-view MCP registered for opencode (url=$MCP_URL, oauth clientId=$MCP_CLIENT_ID)"
+echo "==> opencode.json written (MCP-серверы регистрируются handler-ом per-session)"
 
 # ---------------------------------------------------------------------------
 # Write mcp-first agent definition
@@ -101,6 +82,7 @@ permission:
    - Используйте специализированные отчёты: `get_profit_and_loss`, `get_balance_sheet`, `get_cash_flow`, `get_trial_balance`, `get_margin_analytics`, `get_cost_structure`
    - Для фильтрации по аналитикам: `list_journal_analytics`, `list_report_analytics`
    - Никогда не вычисляйте данные вручную, не генерируйте код для расчётов — MCP-сервер уже предоставляет всё необходимое
+   - MCP-серверы подключены per-session и носят префикс `gross-view-<workspaceId>-<userHash>-<sessionHash>_<tool>` — ищите доступные инструменты в текущей сессии по суффиксу имени (например `..._get_account_plan`), не по статичному имени `gross-view`
 2. **ЧТЕНИЕ** — только если MCP-результат требует дополнительного контекста из репозитория
 3. **ЗАПРОС ПОЛЬЗОВАТЕЛЮ** — если непонятно, какой инструмент вызвать
 4. **КОД** — только для трансформаций/визуализации, которых нет в MCP
@@ -128,7 +110,9 @@ description: Используй когда пользователь спраши
 
 # Справочник MCP-инструментов gross-view
 
-Все доступные инструменты подключённого MCP-сервера `gross-view`:
+MCP-серверы подключаются динамически для каждой сессии с именем
+`gross-view-<workspaceId>-<userHash>-<sessionHash>`; инструменты в текущей сессии
+доступны с этим префиксом (`<server>_<tool>`). Ниже — базовые имена (суффиксы):
 
 | Инструмент | Назначение |
 |---|---|

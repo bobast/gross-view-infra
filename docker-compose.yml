@@ -86,20 +86,17 @@ services:
       # No server-side auth: the handler→opencode direction passes the real
       # user's JWT (attribution), not Basic auth — the server runs on the internal
       # network without its own credentials (gross-view-handler change).
+      # MCP-подключения НЕ настраиваются статично: для каждой сессии handler
+      # регистрирует изолированный сервер gross-view-<ws>-<userHash>-<sessionHash>
+      # через POST /mcp (Authorization: Bearer <mcp-jwt> + X-Workspace-Id) и снимает
+      # его по DELETE /mcp при завершении сессии. Статичный общий OAuth-сервер
+      # (OPENCODE_MCP_* envs) удалён 2026-09-24 — см. §9 docs/opencode-mcp-integration.md.
       BROWSER: "none"
       # LLM provider keys come from the environment (no auth.json / /connect needed):
       # the opencode server reads DEEPSEEK_API_KEY etc. directly as provider credentials.
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
-      OPENCODE_MCP_URL: ${OPENCODE_MCP_URL:-http://host.docker.internal:8082/api/mcp}
-      # Pre-registered Keycloak public client for MCP OAuth (RFC 9728) as the real user.
-      OPENCODE_MCP_CLIENT_ID: ${OPENCODE_MCP_CLIENT_ID:-opencode-mcp}
-      # Request offline tokens: the realm SSO session idles out after 30m (max 10h),
-      # but the offline session lives 30 days without a max lifespan — refresh will
-      # survive long periods of agent idle instead of dropping back to needs_auth.
-      OPENCODE_MCP_SCOPE: ${OPENCODE_MCP_SCOPE:-openid offline_access}
       # nginx terminates TLS for gross-view.local with a self-signed cert; the agent
-      # must trust it to fetch the MCP resource metadata and reach Keycloak over https
-      # when running the OAuth flow.
+      # must trust it to reach the handler's /api/mcp (per-session MCP registration).
       NODE_EXTRA_CA_CERTS: /etc/ssl/gross-view.local.crt
     volumes:
       - opencode_data:/root/.config/opencode
@@ -109,15 +106,17 @@ services:
       - ./certs/gross-view.local.crt:/etc/ssl/gross-view.local.crt:ro
     ports:
       - "4096:4096"
-      # OAuth (RFC 9728) callback port: Keycloak redirects the browser to
-      # http://127.0.0.1:19876/mcp/oauth/callback — the host loopback must forward
-      # to the opencode container for `opencode mcp auth gross-view` to complete.
+      # Opt-in local CLI debug: OAuth (RFC 9728) callback port used by a manual
+      # `opencode mcp auth gross-view` run inside the container against the
+      # pre-registered public client 'opencode-mcp'. The deployed agent opens NO
+      # channels via OAuth (per-session MCP is registered by the handler), so this
+      # mapping is optional — kept for debugging only.
       - "127.0.0.1:19876:19876"
     restart: always
     extra_hosts:
-      # gross-view.local must reach the nginx proxy (TLS termination): inside the
-      # container the name otherwise resolves to its own loopback (127.0.0.1) and the
-      # MCP resource-metadata / Keycloak endpoints become unreachable.
+      # gross-view.local must resolve to the nginx proxy (TLS termination): inside the
+      # container the name otherwise hits its own loopback (127.0.0.1) and the
+      # per-session MCP endpoint https://gross-view.local/api/mcp becomes unreachable.
       - gross-view.local:172.28.0.4
       - host.docker.internal:host-gateway
     networks:
