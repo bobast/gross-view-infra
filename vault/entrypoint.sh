@@ -129,6 +129,8 @@ if ! vault kv metadata get secret/gross-view >/dev/null 2>&1; then
   {
   "anthropic_api_key": "changeme",
   "deepseek_api_key": "REPLACE_WITH_DEEPSEEK_API_KEY",
+  "google_api_key": "changeme",
+  "groq_api_key": "changeme",
   "gv_db_name": "gross_view",
   "gv_db_password": "*Eg3#433@jzHeE",
   "gv_db_user": "gv_dba_user",
@@ -138,22 +140,26 @@ if ! vault kv metadata get secret/gross-view >/dev/null 2>&1; then
   "keycloak_admin": "kc_owner",
   "keycloak_admin_password": "#k*d@rt434wKpZ",
   "keycloak_internal_url": "http://keycloak.gross-view.svc.cluster.local:8080",
+  "mistral_api_key": "changeme",
   "n8n_db_name": "n8n",
   "n8n_db_password": "change_me",
   "n8n_db_user": "change_me",
   "n8n_encryption_key": "change_me",
+  "openai_api_key": "changeme",
   "opencode_agent_client_id": "opencode-agent",
   "opencode_agent_client_secret": "changeme-opencode-agent",
   "opencode_password": "changeme",
   "opencode_server_password": "change_me",
   "opencode_server_username": "opencode",
+  "openrouter_api_key": "changeme",
   "postgres_db": "postgres",
   "postgres_password": "Zf3tXQ%Yc^7K*T",
   "postgres_user": "change_me",
   "wg_internal_subnet": "10.13.13.0",
   "wg_peer_dns": "172.28.0.8",
   "wg_peers": "5",
-  "wg_serverurl": "auto"
+  "wg_serverurl": "auto",
+  "xai_api_key": "changeme"
   }
 SEED
   vault kv put secret/gross-view "@$SEED_FILE" >/dev/null

@@ -37,10 +37,24 @@ spec:
             # server (OPENCODE_MCP_URL/CLIENT_ID/SCOPE) was removed 2026-09-24.
             - name: BROWSER
               value: "none"
-            # LLM provider key (DeepSeek); the opencode server reads it directly as
-            # provider credentials (matches docker-compose DEEPSEEK_API_KEY passthrough).
+            # LLM provider keys; the opencode server reads them directly as provider
+            # credentials (matches docker-compose <PROVIDER>_API_KEY passthrough).
             - name: DEEPSEEK_API_KEY
               valueFrom: { secretKeyRef: { name: gross-view-secrets, key: deepseek_api_key } }
+            - name: OPENAI_API_KEY
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: openai_api_key } }
+            - name: ANTHROPIC_API_KEY
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: anthropic_api_key } }
+            - name: OPENROUTER_API_KEY
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: openrouter_api_key } }
+            - name: GOOGLE_API_KEY
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: google_api_key } }
+            - name: GROQ_API_KEY
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: groq_api_key } }
+            - name: MISTRAL_API_KEY
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: mistral_api_key } }
+            - name: XAI_API_KEY
+              valueFrom: { secretKeyRef: { name: gross-view-secrets, key: xai_api_key } }
           ports:
             - name: http
               containerPort: 4096

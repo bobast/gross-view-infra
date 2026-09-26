@@ -93,8 +93,15 @@ services:
       # (OPENCODE_MCP_* envs) удалён 2026-09-24 — см. §9 docs/opencode-mcp-integration.md.
       BROWSER: "none"
       # LLM provider keys come from the environment (no auth.json / /connect needed):
-      # the opencode server reads DEEPSEEK_API_KEY etc. directly as provider credentials.
+      # the opencode server reads <PROVIDER>_API_KEY directly as provider credentials.
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
       # nginx terminates TLS for gross-view.local with a self-signed cert; the agent
       # must trust it to reach the handler's /api/mcp (per-session MCP registration).
       NODE_EXTRA_CA_CERTS: /etc/ssl/gross-view.local.crt

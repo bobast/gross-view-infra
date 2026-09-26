@@ -149,7 +149,7 @@ access-токен пользователя; управляется env handler-�
 
 | Файл | Изменение |
 |---|---|
-| `docker-compose.yml` | opencode env: **статические `OPENCODE_MCP_URL/CLIENT_ID/SCOPE` удалены (2026-09-24)** — MCP-серверы регистрируются handler-ом per-session (§9); остаются `BROWSER=none`, LLM-ключ `DEEPSEEK_API_KEY` (проброс из `.env`, см. §4.4), `NODE_EXTRA_CA_CERTS` (TLS к `/api/mcp`); объём `opencode-data` смонтирован в `/root/.config/opencode` **и** `/root/.local/share/opencode`; порт `127.0.0.1:19876` — только для локального CLI-дебага; `depends_on: keycloak` удалён |
+| `docker-compose.yml` | opencode env: **статические `OPENCODE_MCP_URL/CLIENT_ID/SCOPE` удалены (2026-09-24)** — MCP-серверы регистрируются handler-ом per-session (§9); остаются `BROWSER=none`, LLM-ключи провайдеров `<PROVIDER>_API_KEY` (DeepSeek/OpenAI/Anthropic/OpenRouter/Google/Groq/Mistral/xAI, проброс из `.env`, см. §4.4), `NODE_EXTRA_CA_CERTS` (TLS к `/api/mcp`); объём `opencode-data` смонтирован в `/root/.config/opencode` **и** `/root/.local/share/opencode`; порт `127.0.0.1:19876` — только для локального CLI-дебага; `depends_on: keycloak` удалён |
 | `nginx/gross-view.local.conf` | upstream `/api/` — `host.docker.internal:8082` (handler на хосте, см. ниже) |
 | `handler/entrypoint.sh` | импорт self-signed `certs/gross-view.local.crt` в JVM-cacerts (для Nimbus JWKS по `https://gross-view.local/sso/...`) |
 | `opencode/entrypoint.sh` | генерирует `/root/.config/opencode/opencode.json` (только `default_agent: mcp-first`, **без** статичного mcp-блока и OAuth) + агента `mcp-first` и skill-справочник (упоминание per-session префикса `gross-view-<ws>-<userHash>-<sessionHash>_<tool>`) |
@@ -249,14 +249,16 @@ KC=/opt/keycloak/bin/kcadm.sh   # внутри контейнера keycloak
 ### 4.4 Управление провайдерами и их ключами
 
 **Основной механизм поступления LLM-ключей — переменные окружения контейнера**
-opencode (провайдеры сервера читают их напрямую как учётные данные). Для DeepSeek
-`DEEPSEEK_API_KEY` пробрасывается из `.env` инфраструктуры через `docker-compose.yml`
-(`environment: DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}`); `.env.example` содержит
-заглушку. После изменения ключа контейнер пересоздаётся:
+opencode (провайдеры сервера читают их напрямую как учётные данные). Ключи
+`DEEPSEEK_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`,
+`GOOGLE_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`, `XAI_API_KEY` пробрасываются из
+`.env` инфраструктуры через `docker-compose.yml`
+(`environment: <PROVIDER>_API_KEY: ${<PROVIDER>_API_KEY:-}`); `.env.example` содержит
+заглушки. После изменения ключа контейнер пересоздаётся:
 
 ```bash
 docker compose up -d opencode
-docker compose exec opencode printenv DEEPSEEK_API_KEY   # контроль
+docker compose exec opencode printenv DEEPSEEK_API_KEY   # контроль (и аналогично для остальных <PROVIDER>_API_KEY)
 ```
 
 Handler дополнительно предоставляет REST-эндпоинты для подключения провайдеров
@@ -278,7 +280,7 @@ Handler дополнительно предоставляет REST-эндпои�
 (`opencode:4096` / `opencode.gross-view.svc.cluster.local:4096`) и не требуют
 новых Secret-ов. Ключи провайдеров, заведённые через runtime-механизм, лежат в
 persistent volume (PVC/volume opencode-data) и переживают перезапуск контейнера;
-учитывать при бэкапе этого volume. Ключи через env (`DEEPSEEK_API_KEY`)
+учитывать при бэкапе этого volume. Ключи через env (`<PROVIDER>_API_KEY`)
 переживают перезапуски по определению и не попадают в volume — их источник —
 `.env`/Secret инфраструктуры.
 
@@ -304,8 +306,9 @@ persistent volume (PVC/volume opencode-data) и переживают перез�
    манифестами API).
 4. **`opencode-deployment.yaml`**: ✅ сделано — `initContainer wait-for-keycloak`
    **удалён** (entrypoint Keycloak не вызывает); env без OAuth-credentials и без
-   статичного MCP-конфига (2026-09-24): только `BROWSER=none` + LLM-ключ
-   `DEEPSEEK_API_KEY` (secretKeyRef `gross-view-secrets/deepseek_api_key`) —
+   статичного MCP-конфига (2026-09-24): только `BROWSER=none` + LLM-ключи
+   `<PROVIDER>_API_KEY` (secretKeyRef `gross-view-secrets/<provider>_api_key`,
+   DeepSeek/OpenAI/Anthropic/OpenRouter/Google/Groq/Mistral/xAI) —
    `OPENCODE_MCP_URL`/`OPENCODE_MCP_CLIENT_ID`/`OPENCODE_MCP_SCOPE` **удалены**,
    MCP-серверы регистрирует handler per-session (§9); entrypoint монтируется из
    ConfigMap `opencode-entrypoint` (`opencode-entrypoint-configmap.yaml`,
