@@ -1,3 +1,7 @@
 /.idea/
 /.env
-/certs/
+# TLS material is never committed, but the directory itself must exist in a fresh
+# clone: docker-compose bind-mounts ./certs, and recreates a missing mount source
+# itself (as root, as an empty directory) which then breaks nginx/opencode.
+/certs/*
+!/certs/.gitkeep

@@ -7,20 +7,80 @@ Docker Compose стек для gross-view: PostgreSQL (TimescaleDB), Keycloak, N
 ## Быстрый старт
 
 ```bash
-cp .env.example .env   # или создайте .env, заполнив необходимые переменные
+cp .env.example .env                              # или создайте .env, заполнив необходимые переменные
+./scripts/generate-self-signed-cert.sh            # самоподписанный сертификат для gross-view.local → certs/
 docker-compose up -d
 ```
+
+### Запись в `/etc/hosts` (обязательно)
+
+nginx публикует порты 80/443 на хост, поэтому ОС должна резолвить домен в loopback.
+Без этой записи браузер и `curl` не найдут `https://gross-view.local`:
+
+```bash
+echo "127.0.0.1  gross-view.local" | sudo tee -a /etc/hosts
+getent hosts gross-view.local     # проверка: должен вернуть 127.0.0.1
+```
+
+Имя должно быть ровно `gross-view.local` — оно же в `server_name` nginx и в SAN сертификата,
+поэтому опечатка в hosts даст «неизвестный хост» и ошибку TLS. Внутри сети контейнеров резолв
+отдельный: opencode получает `gross-view.local → 172.28.0.4` через `extra_hosts` в
+`docker-compose.yml`, nginx — встроенный DNS docker (`127.0.0.11`). Запись в hosts нужна только
+хосту (браузер, `curl`, локальный запуск handler на `host.docker.internal`).
+
+### TLS-сертификат для `gross-view.local`
+
+nginx в docker-compose терминирует TLS самоподписанным сертификатом из каталога `certs/`
+(он целиком монтируется в контейнер как `/etc/nginx/certs`, пути заданы в `nginx/gross-view.local.conf`):
+
+| Файл                              | Кто использует                                                                 |
+|-----------------------------------|--------------------------------------------------------------------------------|
+| `certs/gross-view.local.crt`       | nginx (`ssl_certificate`), opencode (`NODE_EXTRA_CA_CERTS`), handler (JVM truststore) |
+| `certs/gross-view.local.key`       | nginx (`ssl_certificate_key`)                                                   |
+
+```bash
+./scripts/generate-self-signed-cert.sh            # сгенерировать, если файла нет / срок истекает
+./scripts/generate-self-signed-cert.sh --force    # принудительно перевыпустить
+```
+
+⚠️ Файлы `.crt`/`.key` должны существовать **до** `docker-compose up` — иначе nginx упадёт с
+`cannot load certificate … No such file or directory`. Каталог `certs/` смонтирован **целиком**
+(и в nginx, и в opencode) — монтировать отдельный `.crt` файлом нельзя: docker создаёт
+отсутствующий источник bind-mount как **каталог** (от root), и nginx после этого падает с
+`cannot load certificate … Is a directory`. Если такой каталог появился, удалите его
+(`sudo rm -rf certs/gross-view.local.crt`) и перегенерируйте сертификат.
+
+Сертификат самоподписанный **и** помечен `CA:TRUE`, поэтому `.crt` работает как собственный
+корневой сертификат — его достаточно положить в `NODE_EXTRA_CA_CERTS` (opencode) и импортировать
+в JVM-truststore (`handler/entrypoint.sh`), отдельный CA-файл не нужен. SAN:
+`gross-view.local`, `localhost`, `host.docker.internal`, `127.0.0.1`, `172.28.0.4` (IP контейнера nginx).
+
+После перевыпуска нужно пересоздать потребителей (они пиннят файл/монтирование при создании контейнера):
+
+```bash
+docker-compose up -d nginx      # подхватить новый сертификат
+docker-compose up -d opencode   # пересоздать: новая CA через NODE_EXTRA_CA_CERTS
+```
+
+Предупреждения браузера/JVM о самоподписанном издателе — ожидаемы для локального окружения.
 
 ## Сервисы
 
 | Сервис     | IP (внутрен.) | Порты (внешн.) | Описание                                  |
 |------------|---------------|----------------|-------------------------------------------|
-| postgres   | 172.28.0.2    | - (internal)   | Основная БД (TimescaleDB)                  |
-| keycloak   | 172.28.0.3    | - (internal)   | SSO / Identity Provider                   |
+| postgres   | 172.28.0.2    | 5432           | Основная БД (TimescaleDB)                 |
+| keycloak   | 172.28.0.3    | 8080           | SSO / Identity Provider                   |
 | nginx      | 172.28.0.4    | 80, 443        | Reverse proxy (входная точка /sso, /api, /)|
 | opencode   | 172.28.0.5    | 4096           | AI coding agent (web UI)                  |
+| vault      | 172.28.0.6    | - (internal)   | HashiCorp Vault (источник секретов для ESO) |
 
 Внутренняя подсеть: `172.28.0.0/24` (bridge, keycloak_network).
+
+У всех сервисов `restart: always`, поэтому после загрузки хоста (или `systemctl restart docker`)
+стек поднимается автоматически — ручной `docker-compose up -d` нужен только при первом запуске
+или после изменения самого `docker-compose.yml` (политика рестарта фиксируется при создании
+контейнера; для уже созданных контейнеров — `docker-compose up -d` либо
+`docker update --restart=always <container>`).
 
 ## Переменные окружения (.env)
 

@@ -17,6 +17,9 @@ services:
       GV_DB_NAME: ${GV_DB_NAME}
       GV_DB_USER: ${GV_DB_USER}
       GV_DB_PSWD: ${GV_DB_PSWD}
+    # Start postgres automatically with the docker daemon (host boot / `docker
+    # daemon restart`) instead of only after an explicit `docker compose up`.
+    restart: always
     networks:
       keycloak_network:
         ipv4_address: 172.28.0.2
@@ -65,12 +68,22 @@ services:
 
   nginx:
     image: nginx:stable-alpine
+    # Entry point of the whole site on the HOST machine: nginx must own host
+    # ports 80/443 (they are free — nothing else listens on them), otherwise
+    # https://gross-view.local and the canonical MCP URL https://gross-view.local/api/mcp
+    # are unreachable from the browser and from the opencode container.
     ports:
-      - 80:80
-      - 443:443
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
     volumes:
       - ./nginx/gross-view.local.conf:/etc/nginx/conf.d/gross-view.local.conf
       - ./certs:/etc/nginx/certs:ro
+    # Bring nginx up automatically with the docker daemon (host boot / `docker
+    # daemon restart`). Also self-heals a crash-loop: while ./certs is still
+    # empty nginx exits with "cannot load certificate", and it comes back up on
+    # its own as soon as scripts/generate-self-signed-cert.sh has written the
+    # certificate + key.
+    restart: always
     depends_on:
       - keycloak
     networks:
@@ -104,13 +117,17 @@ services:
       XAI_API_KEY: ${XAI_API_KEY:-}
       # nginx terminates TLS for gross-view.local with a self-signed cert; the agent
       # must trust it to reach the handler's /api/mcp (per-session MCP registration).
-      NODE_EXTRA_CA_CERTS: /etc/ssl/gross-view.local.crt
+      NODE_EXTRA_CA_CERTS: /etc/ssl/gross-view/certs/gross-view.local.crt
     volumes:
       - opencode_data:/root/.config/opencode
       - opencode_data:/root/.local/share/opencode
       - ./opencode/entrypoint.sh:/entrypoint.sh:ro
       # Self-signed nginx cert for gross-view.local (consumed via NODE_EXTRA_CA_CERTS).
-      - ./certs/gross-view.local.crt:/etc/ssl/gross-view.local.crt:ro
+      # The whole ./certs DIRECTORY is mounted, never the single .crt file: docker
+      # auto-creates a missing bind-mount source as a DIRECTORY (as root), and a
+      # directory named gross-view.local.crt then breaks nginx with
+      # "cannot load certificate ... Is a directory".
+      - ./certs:/etc/ssl/gross-view/certs:ro
     ports:
       - "4096:4096"
       # Opt-in local CLI debug: OAuth (RFC 9728) callback port used by a manual

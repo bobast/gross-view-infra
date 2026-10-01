@@ -1,0 +1,7 @@
+# Keeps the certs/ directory in the repo so docker-compose's bind mount
+# ./certs:/etc/nginx/certs always has an existing source (docker would otherwise
+# create it as an empty root-owned directory, breaking nginx with
+# "cannot load certificate ...: Is a directory").
+#
+# Real material here (.crt/.key) stays uncommitted — see .gitignore.
+# Generate with: ./scripts/generate-self-signed-cert.sh
