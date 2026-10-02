@@ -9,6 +9,7 @@ Docker Compose стек для gross-view: PostgreSQL (TimescaleDB), Keycloak, N
 ```bash
 cp .env.example .env                              # или создайте .env, заполнив необходимые переменные
 ./scripts/generate-self-signed-cert.sh            # самоподписанный сертификат для gross-view.local → certs/
+sudo ./scripts/install-cert-system-trust.sh       # доверие к нему на хосте (curl/браузер/JVM)
 docker-compose up -d
 ```
 
@@ -62,7 +63,34 @@ docker-compose up -d nginx      # подхватить новый сертифи
 docker-compose up -d opencode   # пересоздать: новая CA через NODE_EXTRA_CA_CERTS
 ```
 
-Предупреждения браузера/JVM о самоподписанном издателе — ожидаемы для локального окружения.
+Предупреждения браузера/JVM о самоподписанном издателе — ожидаемы для локального окружения
+(для host-консоли см. следующий раздел — его можно убрать установкой сертификата в системное хранилище).
+
+### Доверие к сертификату на хосте (curl, git, браузер, JVM)
+
+Самоподписанный сертификат нужно один раз положить в **системное хранилище доверенных сертификатов
+хоста** — иначе `curl`/`git`/`node`/`python` и браузер на хосте получают
+`SSL certificate problem: self-signed certificate`. Контейнеры при этом не меняются: nginx,
+opencode (`NODE_EXTRA_CA_CERTS`) и handler (JVM truststore) читают `certs/` напрямую.
+
+```bash
+sudo apt install libnss3-tools        # certutil для Firefox/Chrome на Linux (NSS db), опционально
+sudo ./scripts/install-cert-system-trust.sh            # system store (+ NSS db, если есть certutil)
+sudo ./scripts/install-cert-system-trust.sh --jvm      # + JDK cacerts (для handler в режиме отладки)
+sudo ./scripts/install-cert-system-trust.sh --uninstall   # убрать из всех хранилищ
+```
+
+| Хранилище                        | Что чинит                              |
+|----------------------------------|----------------------------------------|
+| `/usr/local/share/ca-certificates/` → `update-ca-certificates` | `curl`, `git`, `node`, `python`, `wget` (через `/etc/ssl/certs/ca-certificates.crt`) |
+| `~/.pki/nssdb` (через `certutil`) | Firefox ESR и Chrome/Chromium на Linux — без `libnss3-tools` браузер останется недоверенным |
+| JDK `cacerts` (`--jvm`)          | host-handler в режиме отладки (Spring Boot) — JVM системное хранилище не читает |
+
+Скрипт идемпотентен, поддерживает Debian/Ubuntu (`update-ca-certificates`) и RHEL/Fedora
+(`update-ca-trust`), печатает fingerprint и проверяет результат (`openssl verify` + живой
+TLS-хендшейк с `https://gross-view.local:443`). После каждого перевыпуска сертификата
+(`generate-self-signed-cert.sh --force`) скрипт надо запустить заново — хранилища пиннят старый
+сертификат.
 
 ## Сервисы
 
