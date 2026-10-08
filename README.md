@@ -147,6 +147,30 @@ KEYCLOAK_ADMIN_PASSWORD=
 6. Выпустите первый Let's Encrypt сертификат для `mint-box.ru`.
 7. Проверьте посадочную страницу.
 
+### VPN-доступ к postgres и vault (k8s)
+
+Внутренние сервисы кластера (PostgreSQL, Vault) не публикуются наружу. Для
+разработчика с ноутбука есть WireGuard-шлюз `vpn-gateway`: UDP-порт узла.
+Внутри туннеля nginx-stream-прокси (`vpn-gateway-proxy-configmap.yaml` +
+контейнер `proxy`) публикует порты `10.13.13.1:15432` (postgres) и
+`10.13.13.1:18200` (vault); прокси-слой был удалён 2026-10-07 и восстановлен
+2026-10-08.
+
+```bash
+./scripts/vpn-init.sh                 # ключи сервера -> Secret vpn-gateway-keys
+./scripts/vpn-peer.sh add ivan        # конфиг ivan.conf -> ./vpn/ (0600, в git не попадает)
+kubectl apply -k .
+# подхват peer-ов/ConfigMap — только рестартом пода. С 2026-10-06 у Deployments
+# `strategy: Recreate`, поэтому обычный rollout restart безопасен (не зависает
+# на hostPort):
+kubectl -n gross-view rollout restart deployment/vpn-gateway
+```
+
+На ноутбуке: `wg-quick up` → `sudo wg show` (проверка handshake). Команды
+`psql -h 10.13.13.1 -p 15432` и Vault `http://10.13.13.1:18200` работают после
+пересборки пода с восстановленным прокси-слоем. Полный план, обоснование и меры
+безопасности — [docs/vpn-access-k8s.md](docs/vpn-access-k8s.md).
+
 ### Реестр контейнеров Timeweb Cloud (Артефактори)
 
 Собственные образы gross-view живут в реестре контейнеров Timeweb Cloud — хост `gross-view.registry.twcstorage.ru`. Токен доступа выдается в панели Timeweb при создании реестра и показывается только один раз (начинается с `registry-`); при потере токен перевыпускается в разделе «API и Terraform». Если указанный при push репозиторий ещё не существует, реестр создаст его автоматически.
@@ -365,3 +389,8 @@ curl.exe -I https://mint-box.ru
 ├── themes/
 │   └── gross-view/
 └── gross-view-realm.json
+```
+sudo wg-quick up gross-view
+sudo wg show
+sudo wg-quick down gross-view
+nc -vz -u 200.165.239.108 43210

@@ -158,6 +158,11 @@ services:
       ESO_ROLE_NAME: eso-role
       ESO_BOUND_SA_NAME: eso-vault-auth
       ESO_BOUND_SA_NAMESPACE: gross-view
+      # Dev login for Vault (policy dev-policy, read/write secret/gross-view).
+      # Left empty here the entrypoint keeps the userpass auth method DISABLED —
+      # see docs/vpn-access-k8s.md.
+      VAULT_USERPASS_USER: ${VAULT_USERPASS_USER:-vpn-dev}
+      VAULT_USERPASS_PASSWORD: ${VAULT_USERPASS_PASSWORD:-}
     volumes:
       # Auto-start bootstrap: init on first boot, auto-unseal on every boot.
       - ./vault/entrypoint.sh:/vault/entrypoint.sh:ro

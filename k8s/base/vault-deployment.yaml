@@ -43,6 +43,22 @@ spec:
               value: "eso-vault-auth"
             - name: ESO_BOUND_SA_NAMESPACE
               value: "gross-view"
+            # Dev access over the VPN (docs/vpn-access-k8s.md). `optional: true` on
+            # purpose: on an existing cluster the two keys may not be in Vault yet, and
+            # a hard reference would keep the pod in CreateContainerConfigError. With
+            # them missing the entrypoint just skips userpass auth.
+            - name: VAULT_USERPASS_USER
+              valueFrom:
+                secretKeyRef:
+                  name: gross-view-secrets
+                  key: vault_userpass_username
+                  optional: true
+            - name: VAULT_USERPASS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gross-view-secrets
+                  key: vault_userpass_password
+                  optional: true
           ports:
             - name: http
               containerPort: 8200

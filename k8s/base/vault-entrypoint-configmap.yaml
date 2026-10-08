@@ -44,6 +44,10 @@ data:
     #          from, so a fresh cluster gets `gross-view-secrets` with zero manual steps)
     #        - if running inside a pod (SA token present): Kubernetes auth method +
     #          role `eso-role` bound to the ESO ServiceAccount (see docs/ESO-vault-k8s.md)
+    #        - policy `dev-policy` (read/write secret/data/gross-view) + a `userpass`
+    #          user for humans reaching Vault through the VPN (docs/vpn-access-k8s.md);
+    #          the login is enabled only once `vault_userpass_password` on that path is
+    #          a real value, never while it is unset or still the `change_me` placeholder
     #   5. keeps the server in the foreground so PID-1 signal handling stays sane.
     #
     # Requires: VAULT_ADDR, VAULT_CONFIG_FILE, VAULT_DATA_DIR (see deployment/compose).
@@ -146,6 +150,52 @@ data:
       echo "[vault-entrypoint]   no K8s SA token — skipping Kubernetes auth (docker)"
     fi
 
+    # Dev access over the VPN (see docs/vpn-access-k8s.md): a laptop cannot present a
+    # Kubernetes ServiceAccount token, so a `userpass` login is the simplest way in.
+    # The account may read and write ONLY secret/data/gross-view — the single path ESO
+    # syncs into `gross-view-secrets` — so editing a value in the Vault UI lands in the
+    # cluster on the next ESO refresh. No wildcards, no sys/* access.
+    #
+    # Disabled on purpose while the password is missing or still the seeded
+    # placeholder (`change_me`): a known-password login on a VPN-reachable service is
+    # worse than no login at all. To enable it, set a real password on the path
+    # `secret/data/gross-view` (key `vault_userpass_password`) and restart the pod:
+    #
+    #   vault kv patch secret/gross-view vault_userpass_password='<real password>'
+    #   kubectl -n gross-view annotate externalsecret gross-view-secrets \
+    #     force-sync="$(date +%s)" --overwrite
+    #   kubectl -n gross-view rollout restart deployment/vault
+    VAULT_USERPASS_USER="${VAULT_USERPASS_USER:-vpn-dev}"
+    VAULT_USERPASS_POLICY="${VAULT_USERPASS_POLICY:-dev-policy}"
+
+    vault policy write "$VAULT_USERPASS_POLICY" - >/dev/null <<'POLICY'
+    path "secret/data/gross-view" {
+      capabilities = ["create", "update", "read", "delete"]
+    }
+    path "secret/metadata/gross-view" {
+      capabilities = ["read", "list", "delete"]
+    }
+    POLICY
+    echo "[vault-entrypoint]   policy '${VAULT_USERPASS_POLICY}' written"
+
+    if [ -z "${VAULT_USERPASS_PASSWORD:-}" ] || [ "${VAULT_USERPASS_PASSWORD}" = "change_me" ]; then
+      echo "[vault-entrypoint]   vault_userpass_password is unset or still 'change_me' —"
+      echo "[vault-entrypoint]   skipping userpass auth (set it in secret/data/gross-view)"
+    else
+      if ! vault auth list -format=json 2>/dev/null | grep -q '"userpass/"'; then
+        vault auth enable userpass >/dev/null
+      fi
+      # Two writes on purpose: the first sets/rotates the password, the second the
+      # policy and token TTL (an update never clears fields that are not sent).
+      vault write "auth/userpass/users/${VAULT_USERPASS_USER}" \
+        password="${VAULT_USERPASS_PASSWORD}" >/dev/null
+      vault write "auth/userpass/users/${VAULT_USERPASS_USER}" \
+        policies="${VAULT_USERPASS_POLICY}" \
+        token_ttl=8h \
+        token_max_ttl=24h >/dev/null
+      echo "[vault-entrypoint]   userpass user '${VAULT_USERPASS_USER}' configured (policy ${VAULT_USERPASS_POLICY})"
+    fi
+
     # Bootstrap data for the ExternalSecret: without `secret/gross-view` ESO would
     # have nothing to sync on a fresh cluster, so workloads reading the
     # `gross-view-secrets` Secret (owner-created by ESO) could never start. Values
@@ -184,6 +234,8 @@ data:
       "postgres_db": "postgres",
       "postgres_password": "Zf3tXQ%Yc^7K*T",
       "postgres_user": "change_me",
+      "vault_userpass_password": "change_me",
+      "vault_userpass_username": "vpn-dev",
       "wg_internal_subnet": "10.13.13.0",
       "wg_peer_dns": "172.28.0.8",
       "wg_peers": "5",

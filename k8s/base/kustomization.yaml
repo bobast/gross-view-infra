@@ -30,6 +30,17 @@ resources:
   # (ExternalSecret backing `gross-view-secrets` from Vault path secret/gross-view).
   - eso-clustersecretstore.yaml
   - eso-externalsecret.yaml
+  # VPN gateway (WireGuard + nginx stream proxy) — the only developer entry point to
+  # postgres/vault from outside the cluster; see docs/vpn-access-k8s.md.
+  # Its Secret `vpn-gateway-keys` is deliberately NOT here: key material never lives
+  # in git. Create it with ./scripts/vpn-init.sh (server keys) and maintain peers with
+  # ./scripts/vpn-peer.sh. Until it exists the pods stay Pending on the missing Secret.
+  - vpn-gateway-entrypoint-configmap.yaml
+  # nginx stream proxy of the gateway pod (10.13.13.1:15432 -> postgres,
+  # 10.13.13.1:18200 -> vault). Removed 2026-10-07, restored 2026-10-08 from
+  # docs/vpn-access-k8s.md §12 (the file was never committed before the removal).
+  - vpn-gateway-proxy-configmap.yaml
+  - vpn-gateway-deployment.yaml
 #  - opencode-deployment.yaml
 #  - opencode-service.yaml
 #  - opencode-pvc.yaml

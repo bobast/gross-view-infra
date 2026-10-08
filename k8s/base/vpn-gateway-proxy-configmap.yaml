@@ -1,0 +1,62 @@
+# nginx stream proxy that publishes the VPN-only ports of the vpn-gateway pod.
+#
+# This is the whole access-control surface of the tunnel: a client may only reach
+# 10.13.13.1, and on that address ONLY these two ports exist. Pod CIDR
+# (10.244.0.0/16) and Service CIDR (10.96.0.0/12) are deliberately NOT routed into
+# the tunnel (clients get AllowedIPs = 10.13.13.1/32), so there is nothing else to
+# reach even from inside the cluster network.
+#
+# The listen address is the wg0 address, NOT 0.0.0.0: the proxy must not become
+# reachable from other pods in the cluster.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vpn-gateway-proxy
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: vpn-gateway
+    app.kubernetes.io/part-of: gross-view
+data:
+  nginx.conf: |
+    # Minimal nginx config for the VPN access proxy (nginx:stable-alpine).
+    worker_processes 1;
+    error_log /var/log/nginx/error.log warn;
+    pid /var/run/nginx.pid;
+
+    events {
+      worker_connections 256;
+    }
+
+    stream {
+      # Resolve upstreams at connection time (like nginx/gross-view.local.conf does
+      # for HTTP): a literal `proxy_pass host:port` is resolved once at config load,
+      # so it would keep a stale pod IP after postgres/vault restart. `postgres` is a
+      # headless Service, so it resolves straight to the current pod IP.
+      resolver kube-dns.kube-system.svc.cluster.local valid=10s ipv6=off;
+      resolver_timeout 5s;
+
+      log_format vpn '$remote_addr [$time_local] $protocol $status '
+                     'sent=$bytes_sent recv=$bytes_received '
+                     'session=$session_time upstream=$upstream_addr';
+      access_log /var/log/nginx/access.log vpn;
+
+      # PostgreSQL 15/TimescaleDB over the tunnel.
+      server {
+        listen 10.13.13.1:15432;
+        set $pg_upstream postgres.gross-view.svc.cluster.local:5432;
+        proxy_pass $pg_upstream;
+        proxy_connect_timeout 5s;
+        # Long psql sessions / large dumps: do not cut idle connections.
+        proxy_timeout 1h;
+      }
+
+      # HashiCorp Vault API + UI (plain HTTP inside the tunnel; Vault itself runs
+      # with tls_disable = 1 in this cluster — see vault/vault-config.hcl).
+      server {
+        listen 10.13.13.1:18200;
+        set $vault_upstream vault.gross-view.svc.cluster.local:8200;
+        proxy_pass $vault_upstream;
+        proxy_connect_timeout 5s;
+        proxy_timeout 1h;
+      }
+    }

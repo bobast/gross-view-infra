@@ -18,5 +18,10 @@ vault/vault-config.hcl text eol=lf
 k8s/base/vault-entrypoint-configmap.yaml text eol=lf
 k8s/base/vault-deployment.yaml text eol=lf
 
+# VPN gateway: the same pattern — an LF-only shell script is embedded into
+# data.entrypoint.sh of a ConfigMap mounted into BusyBox ash.
+k8s/base/vpn-gateway-entrypoint-configmap.yaml text eol=lf
+k8s/base/vpn-gateway-deployment.yaml text eol=lf
+
 # PowerShell scripts keep the native Windows CRLF form.
 *.ps1 text eol=crlf

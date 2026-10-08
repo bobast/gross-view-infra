@@ -5,3 +5,8 @@
 # itself (as root, as an empty directory) which then breaks nginx/opencode.
 /certs/*
 !/certs/.gitkeep
+# WireGuard client configs and locally generated server keys (scripts/vpn-init.sh
+# --print-only, scripts/vpn-peer.sh). Private tunnel keys must never be committed.
+# The cluster-side keys live in the Secret `vpn-gateway-keys`, never in git.
+/vpn/
+*.wg.conf
