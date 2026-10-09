@@ -4,10 +4,10 @@
 #
 # Topology:
 #   laptop --WireGuard/UDP 43210--> public IP of worker-192.168.132.5 (hostPort)
-#        --> wg0 10.13.13.1 in this pod
+#        --> wg0 10.2.2.3 in this pod (since 2026-10-09; was 10.13.13.1)
 #
 # NOTE (2026-10-07, restored 2026-10-08): the nginx stream proxy container (and
-# its ConfigMap `vpn-gateway-proxy`, listeners 10.13.13.1:15432 -> postgres /
+# its ConfigMap `vpn-gateway-proxy`, listeners 10.2.2.3:15432 -> postgres /
 # :18200 -> vault) was removed on 2026-10-07 and restored verbatim from
 # docs/vpn-access-k8s.md §12. The proxy is the only thing that serves the two
 # developer-facing ports inside the tunnel; it shares the pod netns so it can
@@ -20,7 +20,7 @@
 #   * NET_ADMIN only, no privileged and no hostNetwork: creating a WireGuard
 #     interface works with NET_ADMIN alone (verified). A host-network WireGuard
 #     would instead have to punch holes in Calico's host FORWARD chain.
-#   * No IP forwarding anywhere: clients only route 10.13.13.1/32, so pod and
+#   * No IP forwarding anywhere: clients only route 10.2.2.3/32, so pod and
 #     service CIDRs never enter the tunnel, and nothing is routed through this pod.
 #     (/proc/sys is read-only in a pod netns unless the pod is privileged — another
 #     reason not to go the "route the whole cluster CIDR" way.)
@@ -70,7 +70,7 @@ spec:
         # manifest and `kubectl apply -k .` recreates the pod (strategy Recreate
         # above keeps that safe on a single node). Do NOT put private keys
         # here — only `name=<peer public key>` entries.
-        vpn.gross-view/peer-publickeys: "GW=ojD0T517girSt/rWvkmbi1LtJb6wGBd+c9RnJVZm+XY="
+        vpn.gross-view/peer-publickeys: "dude=a7vGIUxdHNe6fzk6jDr4Gr/J9ot3Ajip6d2x9oNLDVE="
     spec:
       # Group 101 = user `nginx` of the nginx:stable-alpine image, so the emptyDirs
       # of the proxy container are writable for it (both containers share the pod's
@@ -90,11 +90,17 @@ spec:
               value: wg0
             - name: WG_LISTEN_PORT
               value: "43210"
-            # Server address + tunnel network. 10.13.13.0/24 matches the legacy
-            # `wg_internal_subnet` value already stored in Vault, so the docker-compose
-            # side (gross-view-handler's own WireGuard server) stays compatible.
+            # Server address + tunnel network. Changed 2026-10-09 by request:
+            # 10.13.13.1/24 -> 10.2.2.3/24, so the tunnel subnet is now the same
+            # 10.2.2.0/24 the site-to-site peer `dude` carries in AllowedIPs (the
+            # tunnel IS the 10.2.2.0/24 network: the gateway is .3, the remote side
+            # owns the rest). wg-quick tolerates the overlap — its add_route() skips
+            # an AllowedIPs route that already exists as the interface's connected
+            # route. NOTE: this no longer matches the legacy `wg_internal_subnet`
+            # (10.13.13.0) stored in Vault — that value belongs to the separate
+            # docker-compose WireGuard server inside gross-view-handler, untouched.
             - name: WG_SERVER_ADDRESS
-              value: "10.13.13.1/24"
+              value: "10.2.2.3/24"
             - name: WG_MTU
               value: "1380"
           securityContext:
@@ -185,7 +191,7 @@ spec:
               memory: 192Mi
         # nginx stream proxy: publishes the two VPN-only ports on the wg0 address
         # (postgres 15432, vault 18200). Both containers share the pod network
-        # namespace, but they start in parallel: wait for wg0 to carry 10.13.13.1,
+        # namespace, but they start in parallel: wait for wg0 to carry 10.2.2.3,
         # otherwise nginx fails to bind the stream listen address and exits.
         - name: proxy
           image: dockerhub.timeweb.cloud/library/nginx:stable-alpine
@@ -194,8 +200,8 @@ spec:
             - -c
             - |
               set -eu
-              echo "[vpn-proxy] waiting for wg0 (10.13.13.1)..."
-              until ip -o -4 address show dev wg0 2>/dev/null | grep -q '10\.13\.13\.1/'; do
+              echo "[vpn-proxy] waiting for wg0 (10.2.2.3)..."
+              until ip -o -4 address show dev wg0 2>/dev/null | grep -q '10\.2\.2\.3/'; do
                 sleep 1
               done
               echo "[vpn-proxy] wg0 is up, starting nginx stream proxy"
@@ -215,7 +221,7 @@ spec:
           # between busybox and other nc builds, and this form works with both.
           readinessProbe:
             exec:
-              command: ["sh", "-c", "nc -w 2 10.13.13.1 15432 </dev/null >/dev/null 2>&1"]
+              command: ["sh", "-c", "nc -w 2 10.2.2.3 15432 </dev/null >/dev/null 2>&1"]
             initialDelaySeconds: 10
             periodSeconds: 15
             timeoutSeconds: 5

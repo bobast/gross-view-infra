@@ -28,7 +28,7 @@ data:
     #   peer_<name>_address        AllowedIPs of that peer: a bare tunnel address
     #                              (appended /32), a full CIDR for a site-to-site
     #                              peer (e.g. 192.168.86.0/24), or a comma list
-    #                              without spaces (e.g. 10.13.13.2/32,192.168.86.16/32)
+    #                              without spaces (e.g. 10.2.2.4/32,192.168.86.16/32)
     #                              — anything containing `/` is used verbatim
     #   peer_<name>_endpoint       (optional) `host:port` rendered as Endpoint —
     #                              the gateway dials THIS address for the peer
@@ -49,7 +49,7 @@ data:
 
     WG_IF="${WG_IF:-wg0}"
     WG_LISTEN_PORT="${WG_LISTEN_PORT:-43210}"
-    WG_SERVER_ADDRESS="${WG_SERVER_ADDRESS:-10.13.13.1/24}"
+    WG_SERVER_ADDRESS="${WG_SERVER_ADDRESS:-10.2.2.3/24}"
     WG_MTU="${WG_MTU:-1380}"
     KEYS_DIR="${KEYS_DIR:-/run/vpn-keys}"
     CONFIG_DIR="${CONFIG_DIR:-/config/wg_confs}"

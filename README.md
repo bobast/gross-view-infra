@@ -152,9 +152,9 @@ KEYCLOAK_ADMIN_PASSWORD=
 Внутренние сервисы кластера (PostgreSQL, Vault) не публикуются наружу. Для
 разработчика с ноутбука есть WireGuard-шлюз `vpn-gateway`: UDP-порт узла.
 Внутри туннеля nginx-stream-прокси (`vpn-gateway-proxy-configmap.yaml` +
-контейнер `proxy`) публикует порты `10.13.13.1:15432` (postgres) и
-`10.13.13.1:18200` (vault); прокси-слой был удалён 2026-10-07 и восстановлен
-2026-10-08.
+контейнер `proxy`) публикует порты `10.2.2.3:15432` (postgres) и
+`10.2.2.3:18200` (vault); прокси-слой был удалён 2026-10-07 и восстановлен
+2026-10-08. С 2026-10-09 адрес wg0 — `10.2.2.3/24` (ранее `10.13.13.1/24`).
 
 ```bash
 ./scripts/vpn-init.sh                 # ключи сервера -> Secret vpn-gateway-keys
@@ -167,7 +167,7 @@ kubectl -n gross-view rollout restart deployment/vpn-gateway
 ```
 
 На ноутбуке: `wg-quick up` → `sudo wg show` (проверка handshake). Команды
-`psql -h 10.13.13.1 -p 15432` и Vault `http://10.13.13.1:18200` работают после
+`psql -h 10.2.2.3 -p 15432` и Vault `http://10.2.2.3:18200` работают после
 пересборки пода с восстановленным прокси-слоем. Полный план, обоснование и меры
 безопасности — [docs/vpn-access-k8s.md](docs/vpn-access-k8s.md).
 

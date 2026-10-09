@@ -9,9 +9,23 @@
 `vpn-gateway-proxy` (воссоздан как `k8s/base/vpn-gateway-proxy-configmap.yaml`,
 в git-истории его по-прежнему нет), строка в `kustomization.yaml`, `fsGroup: 101`
 и volume'ы возвращены в `k8s/base/vpn-gateway-deployment.yaml`. Порты
-`10.13.13.1:15432` (postgres) / `10.13.13.1:18200` (vault) снова слушаются
+`10.2.2.3:15432` (postgres) / `10.2.2.3:18200` (vault) снова слушаются
 внутри туннеля. §12 сохранён как историческая точка отсчёта (тексты, которые
 восстанавливались).
+
+**2026-10-09: подсеть туннеля изменена по запросу** — адрес wg0 `10.13.13.1/24`
+→ `10.2.2.3/24` (env `WG_SERVER_ADDRESS` в `vpn-gateway-deployment.yaml`):
+туннель стал частью site-to-site подсети пира `dude` `10.2.2.0/24` — сам шлюз
+живёт в ней как `.3`, AllowedIPs пира (`10.2.2.0/24`) совпадает с on-link
+подсетью интерфейса (wg-quick это переживает: его `add_route()` пропускает
+маршрут, уже существующий как connected). Переведено: прокси-листены и
+wait-loop/readiness на `10.2.2.3`, дефолты `vpn-init.sh`/`vpn-peer.sh`
+(`SERVER_ADDRESS=10.2.2.3/24`, `TUNNEL_PREFIX=10.2.2` — серверный `.3` при
+выдаче адресов ноутбучным пирам пропускается), `.env.example`; у ноутбучных
+пиров теперь `AllowedIPs = 10.2.2.3/32`. Легаси-значение Vault
+`wg_internal_subnet: 10.13.13.0` относится к отдельному WireGuard-серверу в
+gross-view-handler (docker-compose) и не тронуто — подсети двух систем больше
+не совпадают.
 
 Задача: дать разработчику с ноутбука доступ к внутренним сервисам кластера
 (минимум — PostgreSQL и Vault), не публикуя их наружу и не открывая наружу весь
@@ -19,7 +33,7 @@
 
 Решение: под `vpn-gateway` в ns `gross-view`, в котором в одном pod-е живут
 WireGuard-сервер и nginx-stream-proxy. Клиент подключается по
-UDP к публичному IP узла, попадает в туннель `10.13.13.0/24` и видит ровно два
+UDP к публичному IP узла, попадает в туннель `10.2.2.0/24` (адрес шлюза `10.2.2.3/24` с 2026-10-09) и видит ровно два
 порта: прокси на PostgreSQL и прокси на Vault.
 
 ---
@@ -55,15 +69,15 @@ UDP к публичному IP узла, попадает в туннель `10.
 ## 2. Архитектура
 
 ```
-   ноутбук (10.13.13.2/32)
-        │  WireGuard, UDP 43210, AllowedIPs = 10.13.13.1/32
+   ноутбук (10.2.2.2/32)
+        │  WireGuard, UDP 43210, AllowedIPs = 10.2.2.3/32
         ▼
    200.165.239.108:43210  (публичный IP узла worker-192.168.132.5, hostPort)
         │  kube-proxy DNAT
         ▼
    pod vpn-gateway (10.244.4.x, ns gross-view)
    ┌──────────────────────────────────────────────────────────────┐
-   │ wg0 10.13.13.1/24   (контейнер wireguard, NET_ADMIN)        │
+   │ wg0 10.2.2.3/24    (контейнер wireguard, NET_ADMIN)        │
    │   :15432 ──► postgres.gross-view.svc.cluster.local:5432      │
    │   :18200 ──► vault.gross-view.svc.cluster.local:8200         │
    │              (контейнер proxy, nginx stream)                │
@@ -82,7 +96,7 @@ UDP к публичному IP узла, попадает в туннель `10.
 
 | Решение | Почему |
 |---|---|
-| Только прокси-порты, без маршрутизации CIDR | У клиента в `AllowedIPs` стоит `10.13.13.1/32`. Даже если он захочет — в туннель физически нечего положить: ни pod IP, ни ClusterIP, ни `10.96.0.1:443` (API-сервер). Поверхность атаки = UDP-порт, закрытый криптографией WireGuard, и два TCP-порта (прокси-слой восстановлен 2026-10-08; в период 2026-10-07…10-08 их не было). |
+| Только прокси-порты, без маршрутизации CIDR | У клиента в `AllowedIPs` стоит `10.2.2.3/32`. Даже если он захочет — в туннель физически нечего положить: ни pod IP, ни ClusterIP, ни `10.96.0.1:443` (API-сервер). Поверхность атаки = UDP-порт, закрытый криптографией WireGuard, и два TCP-порта (прокси-слой восстановлен 2026-10-08; в период 2026-10-07…10-08 их не было). |
 | Оба компонента в одном pod-е | nginx должен слушать адрес `wg0`. Разные pod-ы = разные netns; либо `hostNetwork` у обоих, либо сетевой плагин вроде Multus. Общий netns — самое простое. |
 | `hostPort`, а не `Service` | LB Timeweb не умеет UDP (см. §1). |
 | `NET_ADMIN` без `privileged` и без `hostNetwork` | Подтверждено замером. Никаких правок в Calico и на узле. |
@@ -97,7 +111,7 @@ UDP к публичному IP узла, попадает в туннель `10.
 |---|---|
 | `k8s/base/vpn-gateway-deployment.yaml` | Deployment: init-контейнер `render-config` (рендер конфига из Secret) + контейнер `wireguard` (образ `linuxserver/wireguard`, `NET_ADMIN`, `hostPort 43210/udp`) + контейнер `proxy` (nginx stream, восстановлен 2026-10-08; был удалён 2026-10-07) |
 | `k8s/base/vpn-gateway-entrypoint-configmap.yaml` | Скрипт рендера `wg0.conf` из Secret (LF-пин в `.gitattributes`); запускается init-контейнером, сам туннель поднимает образ |
-| `k8s/base/vpn-gateway-proxy-configmap.yaml` | `nginx.conf` со stream-листенерами на `10.13.13.1` (`15432` → postgres, `18200` → vault). Удалён 2026-10-07, **восстановлен 2026-10-08** из §12 (в git-истории его **нет** — первая версия файла не была закоммичена) |
+| `k8s/base/vpn-gateway-proxy-configmap.yaml` | `nginx.conf` со stream-листенерами на `10.2.2.3` (с 2026-10-09; `15432` → postgres, `18200` → vault). Удалён 2026-10-07, **восстановлен 2026-10-08** из §12 (в git-истории его **нет** — первая версия файла не была закоммичена) |
 | `k8s/base/kustomization.yaml` | Ресурсы vpn-шлюза в сборке (с 2026-10-08 — три: deployment + entrypoint-configmap + proxy-configmap) |
 | `scripts/lib-wg-keys.sh` | Общая генерация ключей для обоих скриптов: backend `wg` или fallback на `openssl` (X25519) |
 | `scripts/vpn-init.sh` | Генерация серверных ключей → Secret `vpn-gateway-keys` |
@@ -126,24 +140,25 @@ peer_<имя>_address       ┘─ по паре на разработчика; 
   Защиту handshake даёт сама X25519-пара; `vpn-peer.sh remove` при отклике пира
   по-прежнему затирает легаси-ключ `presharedkey`, если он в Secret остался;
 - `peer_<имя>_address` хранит **AllowedIPs** пира: голый адрес туннеля
-  (`10.13.13.2` → в конфиг попадает `10.13.13.2/32`) либо готовый CIDR для
+  (`10.2.2.2` → в конфиг попадает `10.2.2.2/32`) либо готовый CIDR для
   site-to-site пира (`192.168.86.0/24` остаётся как есть). Append `/32` к CIDR
   дал бы `192.168.86.0/24/32` и WireGuard отверг весь конфиг — скрипт это
   знает (см. ветку `case "$allowed" in */*)` в ConfigMap);
 - несколько AllowedIPs — через запятую **без пробелов**
-  (`10.13.13.2/32,192.168.86.16/32`): значение содержит `/`, ветка `*/*`
+  (`10.2.2.4/32,192.168.86.16/32`): значение содержит `/`, ветка `*/*`
   в `case` пропускает его верbatim, `wg show` подтверждает оба CIDR у пира (живая
   проверка 2026-10-07);
 - для пира с AllowedIPs вне серверной подсети маршрут `dev wg0` ставит сам
   `wg-quick` (проверено на живом буте 2026-10-06: `ip -4 route add
-  192.168.86.0/24 dev wg0`): wg0 несёт on-link только `10.13.13.0/24`, без
+  192.168.86.0/24 dev wg0`): wg0 несёт on-link только `10.2.2.0/24`, без
   маршрута ответ пира ушёл бы из pod-а в eth0 и потерялся.
 
-**Текущие peer-ы (на 2026-10-08):**
+**Текущие peer-ы (на 2026-10-09):**
 
 | Peer | AllowedIPs | Комментарий |
 |---|---|---|
-| `GW` | `10.10.11.1/32,10.10.11.41/32` | **текущий (добавлен 2026-10-08 взамен `gagarin`)** — внешний шлюз: публичный ключ `ojD0T517girSt/rWvkmbi1LtJb6wGBd+c9RnJVZm+XY=`, `Endpoint = 77.232.55.58:13233`, `PersistentKeepalive = 23` (секунды). Чужой ключ + endpoint/keepalive — только прямой патч Secret-а: `peer_GW_{publickey,address,endpoint,keepalive}` (штатный `vpn-peer.sh add` генерирует свою пару и чужой ключ принять не может). `endpoint`/`keepalive` — новые **опциональные** ключи: рендер-скрипт (`vpn-gateway-entrypoint-configmap.yaml`) добавляет `Endpoint`/`PersistentKeepalive` в `[Peer]` только если ключ существует, `vpn-peer.sh remove` чистит их наравне с остальными. Проверено: `render-config` → `wrote ... with 1 peer(s)`, `wg show wg0` → peer `ojD0…`, endpoint `77.232.55.58:13233`, `persistent keepalive: every 23 seconds`, маршруты `10.10.11.1/32`/`10.10.11.41/32 dev wg0` (2026-10-08 к `AllowedIPs` добавлен `10.10.11.41/32`). |
+| `dude` | `10.2.2.0/24` | **текущий (добавлен 2026-10-09 взамен `GW`)** — внешний шлюз `Dude2.platforma.ltd`: публичный ключ `a7vGIUxdHNe6fzk6jDr4Gr/J9ot3Ajip6d2x9oNLDVE=`, `Endpoint = Dude2.platforma.ltd:58944` (wg резолвит хостнейм при старте пода — живой адрес `194.87.210.218:58944`; первоначально был указан неверный порт 57448 — исправлен тем же днём), `PersistentKeepalive = 23` (задан пользователем как `00:00:23`, в Secret — секунды), **без** PSK; AllowedIPs — site-to-site CIDR `10.2.2.0/24` (содержит `/` → используется verbatim, маршрут `10.2.2.0/24 dev wg0`). Чужой ключ + endpoint/keepalive — только прямой патч Secret-а: `peer_dude_{publickey,address,endpoint,keepalive}` + pod-аннотация `vpn.gross-view/peer-publickeys` → `dude=<pubkey>` + `kubectl apply -k .` (Recreate пересобрал под); смена порта на `58944` — прямой патч `peer_dude_endpoint` + `kubectl -n gross-view rollout restart deployment/vpn-gateway` (аннотация содержит только публичный ключ — она не менялась, `apply -k .` под бы не пересобрал). Проверено 2026-10-09: `render-config` → `wrote ... with 1 peer(s)`, `wg show wg0` → peer `a7vGIUxd…`, endpoint `194.87.210.218:58944`, `persistent keepalive: every 23 seconds`, маршрут `10.2.2.0/24 dev wg0`, **рукопожатие есть** (с неверным портом 57448 туннель не поднимался: пакеты уходили без ответа). С 2026-10-09 подсеть `10.2.2.0/24` стала и подсетью самого туннеля: wg0 = `10.2.2.3/24`, AllowedIPs пира совпадает с connected-route интерфейса (wg-quick в `add_route()` пропускает уже существующий маршрут — дубля не будет). |
+| ~~`GW`~~ | ~~`10.10.11.1/32,10.10.11.41/32`~~ | **отозван 2026-10-09** (заменён на `dude`; `vpn-peer.sh remove GW` вычистил `peer_GW_*`, локального конфига не было): внешний шлюз, добавлен 2026-10-08 взамен `gagarin`: публичный ключ `ojD0T517girSt/rWvkmbi1LtJb6wGBd+c9RnJVZm+XY=`, `Endpoint = 77.232.55.58:13233`, `PersistentKeepalive = 23` (секунды). Чужой ключ + endpoint/keepalive — только прямой патч Secret-а: `peer_GW_{publickey,address,endpoint,keepalive}` (штатный `vpn-peer.sh add` генерирует свою пару и чужой ключ принять не может). `endpoint`/`keepalive` — новые **опциональные** ключи: рендер-скрипт (`vpn-gateway-entrypoint-configmap.yaml`) добавляет `Endpoint`/`PersistentKeepalive` в `[Peer]` только если ключ существует, `vpn-peer.sh remove` чистит их наравне с остальными. Проверено: `render-config` → `wrote ... with 1 peer(s)`, `wg show wg0` → peer `ojD0…`, endpoint `77.232.55.58:13233`, `persistent keepalive: every 23 seconds`, маршруты `10.10.11.1/32`/`10.10.11.41/32 dev wg0` (2026-10-08 к `AllowedIPs` добавлен `10.10.11.41/32`). |
 | ~~`gagarin`~~ | ~~`10.13.13.2/32, 192.168.86.16/32`~~ | **отозван полностью 2026-10-08**: `vpn-peer.sh remove gagarin` вычистил `peer_gagarin_*` из Secret (скрипт попутно починен — комментарий внутри продолжения строки `-p \` уводил JSON в комментарий и ронял `remove`), локальный `vpn/gagarin.conf` удалён, под пересобран. Эта же машина (хост `gagarin`, в LAN `192.168.86.0/24`); второй CIDR — LAN-IP хоста, на него кластер теперь маршрутизирует через туннель (маршрут `192.168.86.16 dev wg0` в pod-netns шлюза). **Ротация №8 (2026-10-08, последняя — пир `gagarin` отозван полностью тем же днём):** действовавший на тот момент публичный ключ `sOrBWZVxNJuLgY2X8PcKWME+JcYOP0nTwe/RA38OewY=` — явный возврат к ключу №2: прямой патч Secret-а (`peer_gagarin_publickey`, значение в обычном base64 только в `data`, `peer_gagarin_address` не тронут) + правка pod-аннотации `vpn.gross-view/peer-publickeys` в манифесте (ключ изменился — сработал триггер пересборки) + `kubectl apply -k .`. Проверено: `render-config` → `wrote ... with 1 peer(s)`, `wg show wg0` печатает peer `sOrBWZVx…` с `allowed ips: 10.13.13.2/32, 192.168.86.16/32`. Заодно при этой ротации исправлена порча манифеста: у контейнера `wireguard` в `drop:` лежала склеенная строка `- ALLsOrBWZVx…` вместо `- ALL` — «drop ALL» не срабатывал и контейнер работал с полным дефолтным набором capabilities (проверено живьём до правки: `CapEff a80435fb` = дефолт + NET_ADMIN); после правки и пересборки `CapEff = 0000000000001003` (только CHOWN|DAC_OVERRIDE|NET_ADMIN). ⚠️ Локальный `vpn/gagarin.conf` (удалён 2026-10-08 вместе с пиром) содержал приватный ключ пары `08/del…` — ни к №8, ни к №7 он парой не был. **Ротация №7 (2026-10-07, отозвана):** публичный ключ `iJC0hhmgdv2hD+nyF/iUxJsNFL33c/izzxzDPyHBsQc=` — внесён прямым патчем Secret-а (значение только в `data`, `peer_gagarin_address` не тронут), под пересобран через `kubectl -n gross-view rollout restart deployment/vpn-gateway`; тогда проверено `wg show wg0` → peer `iJC0hhmg…` с `allowed ips: 10.13.13.2/32, 192.168.86.16/32`. Перед патчем №7 в Secret лежал `sOrBWZVx…` (№2) — записи о ротациях №3–№6 состоянию Secret не соответствовали. **Ротация №6 (отозвана):** публичный ключ `IF9oLK/VU6TC393yw8gW6E64FDyJ9kemWU9eIUo2p0w=` — внесён прямым патчем Secret-а (сгенерирован на стороне клиента) и дублирован в pod-аннотацию `vpn.gross-view/peer-publickeys`, под пересобран через `kubectl apply -k .`; одновременно `peer_gagarin_address` расширен до двух CIDR (в wg-конфиг значение попадает **без пробелов** после запятой: `10.13.13.2/32,192.168.86.16/32` — ветка `case */*` использует его верbatim, оба CIDR не содержат `/0`, так что default-route логика wg-quick не задевается). Предыдущие (отозваны): `yn+R6H7OeIMdWGKyHLc3D75Q5dDM7jdjuZWeXY2yl3Q=` (№5, 2026-10-06, с `AllowedIPs = 10.13.13.2`), `+3iZ8kgN5UATV9OcVR/raGzILYGhAQZc8s8NQfd1TWU=` (№4), `3S8E4r8Xp2wGCPYtZ8Cs76eXPs4vLPcFqxhuCBlPCiQ=` (№3), `sOrBWZVxNJuLgY2X8PcKWME+JcYOP0nTwe/RA38OewY=` (№2), `O3c/U4UQF53WrSWebqXItdfeEXaT/f13gCQyJfr/GUw=` (№1), до них — site-to-site `BQzP2vDjnqFHB+zxaztyG8WoK7LFHdjKocXnE8Du4Hw=`. ⚠️ Локального `vpn/gagarin.conf` в репозитории нет — клиентский конфиг должен быть пары `IF9o…` (приватный ключ остался на клиентской машине) |
 | ~~`pavlov`~~ | — | — | отозван 2026-10-06 (из Secret вычищены `peer_pavlov_*`, локальный `vpn/pavlov.conf` удалён) |
 
@@ -206,7 +221,7 @@ kubectl -n gross-view rollout restart deployment/vault
 ./scripts/vpn-peer.sh list      # кто зарегистрирован
 ```
 
-Сейчас в Secret один пир — **`GW`** (`AllowedIPs = 10.10.11.1/32,10.10.11.41/32`, `Endpoint = 77.232.55.58:13233`, `PersistentKeepalive = 23`, см. §3), добавленный прямым патчем Secret-а 2026-10-08: `peer_GW_publickey` + `peer_GW_address` + опциональные `peer_GW_endpoint`/`peer_GW_keepalive` (чужой публичный ключ — `vpn-peer.sh add` генерирует свою пару и его принять не может). Локального конфига у него нет — приватный ключ живёт на стороне внешнего шлюза.
+Сейчас в Secret один пир — **`dude`** (`AllowedIPs = 10.2.2.0/24`, `Endpoint = Dude2.platforma.ltd:58944`, `PersistentKeepalive = 23`, см. §3), добавленный прямым патчем Secret-а 2026-10-09: `peer_dude_publickey` + `peer_dude_address` + опциональные `peer_dude_endpoint`/`peer_dude_keepalive` (чужой публичный ключ — `vpn-peer.sh add` генерирует свою пару и его принять не может). Локального конфига у него нет — приватный ключ живёт на стороне внешнего шлюза. `GW` отозван тем же днём (`vpn-peer.sh remove GW` → Secret очищен, локального конфига у него тоже не было).
 `gagarin` отозван полностью тем же днём (`remove gagarin` → Secret очищен,
 локальный `vpn/gagarin.conf` удалён), `pavlov` — 2026-10-06. Прежний
 site-to-site пир `gagarin` (`192.168.86.0/24`, внешний ключ) отозван
@@ -268,9 +283,9 @@ kubectl -n gross-view exec deploy/vpn-gateway -c wireguard -- wg show wg0
 
 ```bash
 kubectl -n gross-view exec deploy/vpn-gateway -c proxy -- \
-  wget -qO- --timeout=5 http://10.13.13.1:18200/v1/sys/health     # vault: initialized/unsealed
+  wget -qO- --timeout=5 http://10.2.2.3:18200/v1/sys/health     # vault: initialized/unsealed
 kubectl -n gross-view exec deploy/vpn-gateway -c proxy -- \
-  sh -c 'nc -w 3 10.13.13.1 15432 </dev/null && echo postgres OK'   # 5432 через stream
+  sh -c 'nc -w 3 10.2.2.3 15432 </dev/null && echo postgres OK'   # 5432 через stream
 kubectl -n gross-view exec deploy/vpn-gateway -c proxy -- tail -5 /var/log/nginx/access.log
 # в access.log видно upstream: 10.244.x.x:5432 и 10.96.200.70:8200 — DNS-резолв сработал
 ```
@@ -284,8 +299,8 @@ sudo wg show                     # latest handshake, transfer, endpoint
 sudo wg-quick down gross-view
 ```
 
-⚠️ Проверки доступа к сервисам (`psql "host=10.13.13.1 port=15432 ..."`,
-`curl http://10.13.13.1:18200/v1/sys/health`, `vault login -method=userpass
+⚠️ Проверки доступа к сервисам (`psql "host=10.2.2.3 port=15432 ..."`,
+`curl http://10.2.2.3:18200/v1/sys/health`, `vault login -method=userpass
 username=vpn-dev`, `vault kv get/patch secret/gross-view`) **работают с
 2026-10-08** (прокси-слой восстановлен; в период 2026-10-07…10-08 прокси-портов
 внутри туннеля не было). Пароль для psql берётся из `gross-view-secrets`
@@ -325,7 +340,7 @@ Entrypoint перечитывает Secret только при старте по
 барьером. Отдельный Service не нужен — `postgres` headless, и nginx резолвит
 `postgres.gross-view.svc.cluster.local` в pod IP в момент соединения (`resolver
 ... valid=10s`), поэтому перезапуск пода не ломает туннель. DBeaver/pgAdmin/GUI
-работают: хост `10.13.13.1`, порт `15432`.
+работают: хост `10.2.2.3`, порт `15432`.
 
 **Vault.** В кластере Vault работает с `tls_disable = 1` (`vault/vault-config.hcl`),
 поэтому по туннелю идёт обычный HTTP — это нормально, трафик шифруется WireGuard.
@@ -347,7 +362,7 @@ Entrypoint перечитывает Secret только при старте по
 |---|---|
 | Скан UDP-порта 43210 снаружи | WireGuard отвечает только на валидный handshake; неавторизованные пакеты отбрасываются. Наличие порта не даёт ничего |
 | Подбор/перебор ключа peer-а | Curve25519 (X25519): подбор приватного ключа из публичного непрактичен, весь handshake держится на кривой. Preshared key не используется — от него отказались 2026-10-06 (из Secret удалён `peer_gagarin_presharedkey`, скрипты `psk` не генерируют). Подмена адреса не проходит из-за привязки к ключу |
-| Доступ разработчика в кластер мимо двух портов | У клиента в туннеле маршрутизируется только `10.13.13.1/32`; pod/service CIDR недоступны by construction. На стороне сервера в wg-подсистему уходят только AllowedIPs пиров (`10.10.11.1/32,10.10.11.41/32` у `GW`; у отозванного `gagarin` — `10.13.13.2/32, 192.168.86.16/32`, для site-to-site пира туда же уходил бы его CIDR, маршрут `dev wg0` живёт в pod-netns шлюза и наружу не выходит) |
+| Доступ разработчика в кластер мимо двух портов | У клиента в туннеле маршрутизируется только `10.2.2.3/32`; pod/service CIDR недоступны by construction. На стороне сервера в wg-подсистему уходят только AllowedIPs пиров (`10.2.2.0/24` у `dude`; у отозванных `GW` — `10.10.11.1/32,10.10.11.41/32`, `gagarin` — `10.13.13.2/32, 192.168.86.16/32`, для site-to-site пира туда же уходил бы его CIDR, маршрут `dev wg0` живёт в pod-netns шлюза и наружу не выходит) |
 | Попадание приватного ключа в git | Клиентский ключ генерируется локально и остаётся в `vpn/<name>.conf` (0600, `.gitignore`); серверный ключ — только в Secret |
 | Плейсхолдер-пароль `change_me` как рабочий | Entrypoint **не** включает userpass, пока пароль пуст или равен `change_me` (проверено в §5 шаг 1) |
 | Компрометация ноутбука | Отзыв = `vpn-peer.sh remove` + `rollout restart` (секунды). Ключи можно перевыпустить (`add --reissue`) |
@@ -382,7 +397,7 @@ Entrypoint перечитывает Secret только при старте по
 2. **Аудит Vault**: включить файловый аудит-устройство, иначе userpass-доступ разработчика не оставляет следов.
 3. **TLS для Vault** (`tls_disable = 0` + `vault-tls` initContainer по образцу nginx) — полезно, когда к Vault начнут ходить не только через туннель.
 4. **HA/резервирование шлюза.** Сейчас `replicas: 1` на одном worker: рестарт пода = минуты без доступа. Ключи можно шарить через Secret и поднять второй `vpn-gateway` с `hostPort` на другом узле (нужен второй worker, которого пока нет).
-5. **WireGuard-поддержка на стороне handler**: если появится k8s-деплой `gross-view-handler`, часть маршрутизации (`wg_*`-ключи в Vault уже есть, включая `wg_internal_subnet: 10.13.13.0`) можно будет переиспользовать.
+5. **WireGuard-поддержка на стороне handler**: если появится k8s-деплой `gross-view-handler`, часть маршрутизации (`wg_*`-ключи в Vault уже есть, включая `wg_internal_subnet: 10.13.13.0`) можно будет переиспользовать — но это значение теперь относится только к docker-compose WG handler'а: сам k8s-шлюз с 2026-10-09 живёт в `10.2.2.0/24`.
 6. **MTU**: взят консервативный `1380`; при жалобах на зависание больших `pg_dump` — проверить, не режется ли трафик на VXLAN/MTU 1500.
 
 ---
@@ -411,7 +426,7 @@ kubectl apply -k .                                            # вернуть k
 | Гипотеза | Как проверить при внедрении |
 |---|---|
 | Реальный handshake WireGuard через интернет до `200.165.239.108:43210` | Шаг 4: `wg show` должен показать `latest handshake`. **UDP-доходимость подтверждена замером (2026-10-05), сам handshake — нет: его даёт только клиент с ноутбука** |
-| Трафик `10.13.13.1 → postgres` проходит без потерь и без зависания длинных сессий | С 2026-10-08 (прокси восстановлен): `psql` + `pg_dump` большой таблицы, сессия дольше `proxy_timeout`. TCP-установление через stream уже проверено изнутри pod-а |
+| Трафик `10.2.2.3 → postgres` проходит без потерь и без зависания длинных сессий | С 2026-10-08 (прокси восстановлен): `psql` + `pg_dump` большой таблицы, сессия дольше `proxy_timeout`. TCP-установление через stream уже проверено изнутри pod-а |
 | nginx stream корректно резолвит headless `postgres` после рестарта его пода | `kubectl -n gross-view delete pod postgres-0` и повторный `psql`. Резолв на текущий IP подтверждён (upstream `10.244.4.116:5432` в access.log) |
 | Образ `linuxserver/wireguard` поднимает туннель вживую в поде (проверено только на локальном буте в namespace) | Логи `-c wireguard`: `Client mode selected` → `Activating tunnel` → `All tunnels are now active`; затем `wg show wg0` печатает peer |
 
@@ -427,7 +442,7 @@ kubectl apply -k .                                            # вернуть k
 | Логи `-c wireguard`: `No valid tunnel config found` / `Tunnel ... failed` | Init-контейнер `render-config` не записал `/config/wg_confs/wg0.conf` (см. его лог: обычно `FATAL: ... no server_privatekey`) либо `wg-quick up` отверг конфиг. ⚠️ В этой ветке образ делает `ip route del default` — default-route пода пропадает, и контейнер `proxy` (восстановлен 2026-10-08) из-за этого теряет DNS → резолв upstream'ов в stream-конфиге не работает, хотя nginx поднимается. Смотрите лог `-c render-config` |
 | В логах `wrote ... with 0 peer(s)`, хотя peer добавлен | Имена ключей Secret разбираются как `peer_<имя>_*`; при неверном разборе address-файл ищется как `peer_peer_<имя>_address` и peer молча пропускается. Проверьте `wg show wg0` — там должен быть блок `peer:` |
 | Под `Pending` после `rollout restart` | Не должно случаться со `strategy: Recreate`; если случилось — стратегия снова `RollingUpdate`: `scale deployment/vpn-gateway --replicas=0` → дождаться удаления → `--replicas=1` (тот же приём, что для nginx) |
-| Под `Running`, но `0/1` по прокси-контейнеру | Контейнер `proxy` ждёт wg0 (`wait`-цикл) либо его readiness (`nc 10.13.13.1 15432`) не проходит: wg0 не поднялся — смотрите логи `-c wireguard` (обычно нет ключа в Secret, см. первую строку) и `-c proxy` |
+| Под `Running`, но `0/1` по прокси-контейнеру | Контейнер `proxy` ждёт wg0 (`wait`-цикл) либо его readiness (`nc 10.2.2.3 15432`) не проходит: wg0 не поднялся — смотрите логи `-c wireguard` (обычно нет ключа в Secret, см. первую строку) и `-c proxy` |
 | Туннель поднимается, `wg show` без handshake | Проверьте `Endpoint` в конфиге: публичный IP узла `200.165.239.108` должен совпадать с текущим `EXTERNAL-IP` (`kubectl get nodes -o wide`); сменился IP — перевыпустите конфиг (`vpn-peer.sh add <имя> --reissue`) |
 | `psql` через 15432 не подключается | Туннель работает, но сервис не слушает: `kubectl -n gross-view get endpoints postgres vault`. Также проверьте контейнер `proxy`: `kubectl -n gross-view logs deploy/vpn-gateway -c proxy` (в логе должен быть `[vpn-proxy] wg0 is up, starting nginx stream proxy`) |
 
@@ -440,6 +455,8 @@ kubectl apply -k .                                            # вернуть k
 > создан здесь впервые, контейнер `proxy`, `fsGroup: 101` и volume'ы — обратно
 > в `vpn-gateway-deployment.yaml`, строка — обратно в `kustomization.yaml`).
 > Раздел сохранён как историческая точка отсчёта текстов.
+> ⚠️ Адреса в артефактах ниже — исторические (`10.13.13.x`): с 2026-10-09
+> подсеть туннеля `10.2.2.0/24`, wg0 = `10.2.2.3/24`.
 
 ⚠️ Файл `k8s/base/vpn-gateway-proxy-configmap.yaml` **не был закоммичен** (лежал
 только в индексе git) — при удалении из рабочего дерева он исчез бы из истории

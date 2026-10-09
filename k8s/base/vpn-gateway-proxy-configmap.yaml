@@ -1,10 +1,10 @@
 # nginx stream proxy that publishes the VPN-only ports of the vpn-gateway pod.
 #
 # This is the whole access-control surface of the tunnel: a client may only reach
-# 10.13.13.1, and on that address ONLY these two ports exist. Pod CIDR
-# (10.244.0.0/16) and Service CIDR (10.96.0.0/12) are deliberately NOT routed into
-# the tunnel (clients get AllowedIPs = 10.13.13.1/32), so there is nothing else to
-# reach even from inside the cluster network.
+# 10.2.2.3 (the wg0 address since 2026-10-09), and on that address ONLY these two
+# ports exist. Pod CIDR (10.244.0.0/16) and Service CIDR (10.96.0.0/12) are
+# deliberately NOT routed into the tunnel (clients get AllowedIPs = 10.2.2.3/32),
+# so there is nothing else to reach even from inside the cluster network.
 #
 # The listen address is the wg0 address, NOT 0.0.0.0: the proxy must not become
 # reachable from other pods in the cluster.
@@ -42,7 +42,7 @@ data:
 
       # PostgreSQL 15/TimescaleDB over the tunnel.
       server {
-        listen 10.13.13.1:15432;
+        listen 10.2.2.3:15432;
         set $pg_upstream postgres.gross-view.svc.cluster.local:5432;
         proxy_pass $pg_upstream;
         proxy_connect_timeout 5s;
@@ -53,7 +53,7 @@ data:
       # HashiCorp Vault API + UI (plain HTTP inside the tunnel; Vault itself runs
       # with tls_disable = 1 in this cluster — see vault/vault-config.hcl).
       server {
-        listen 10.13.13.1:18200;
+        listen 10.2.2.3:18200;
         set $vault_upstream vault.gross-view.svc.cluster.local:8200;
         proxy_pass $vault_upstream;
         proxy_connect_timeout 5s;

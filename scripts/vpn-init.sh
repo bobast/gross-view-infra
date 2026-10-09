@@ -16,7 +16,7 @@
 #                                         #   (air-gapped flow, then kubectl create secret)
 #
 # Env overrides: NAMESPACE (gross-view), SECRET_NAME (vpn-gateway-keys),
-#                SERVER_ADDRESS (10.13.13.1/24), LISTEN_PORT (43210),
+#                SERVER_ADDRESS (10.2.2.3/24), LISTEN_PORT (43210),
 #                OUT_DIR (vpn), WG_BIN (wg).
 #
 # Requires locally EITHER the `wg` tool (wireguard-tools: apt/dnf/brew install
@@ -32,7 +32,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-wg-keys.sh"
 
 NAMESPACE="${NAMESPACE:-gross-view}"
 SECRET_NAME="${SECRET_NAME:-vpn-gateway-keys}"
-SERVER_ADDRESS="${SERVER_ADDRESS:-10.13.13.1/24}"
+SERVER_ADDRESS="${SERVER_ADDRESS:-10.2.2.3/24}"
 LISTEN_PORT="${LISTEN_PORT:-43210}"
 OUT_DIR="${OUT_DIR:-vpn}"
 WG_BIN="${WG_BIN:-wg}"

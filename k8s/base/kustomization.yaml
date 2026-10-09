@@ -36,8 +36,8 @@ resources:
   # in git. Create it with ./scripts/vpn-init.sh (server keys) and maintain peers with
   # ./scripts/vpn-peer.sh. Until it exists the pods stay Pending on the missing Secret.
   - vpn-gateway-entrypoint-configmap.yaml
-  # nginx stream proxy of the gateway pod (10.13.13.1:15432 -> postgres,
-  # 10.13.13.1:18200 -> vault). Removed 2026-10-07, restored 2026-10-08 from
+  # nginx stream proxy of the gateway pod (10.2.2.3:15432 -> postgres,
+  # 10.2.2.3:18200 -> vault; wg0 address since 2026-10-09). Removed 2026-10-07, restored 2026-10-08 from
   # docs/vpn-access-k8s.md §12 (the file was never committed before the removal).
   - vpn-gateway-proxy-configmap.yaml
   - vpn-gateway-deployment.yaml

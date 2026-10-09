@@ -15,7 +15,7 @@
 #
 # Env overrides: NAMESPACE (gross-view), SECRET_NAME (vpn-gateway-keys),
 #                ENDPOINT (200.165.239.108:43210 — public IP of the k8s worker),
-#                TUNNEL_PREFIX (10.13.13), SERVER_ADDRESS (10.13.13.1/24),
+#                TUNNEL_PREFIX (10.2.2), SERVER_ADDRESS (10.2.2.3/24),
 #                PEER_RANGE (2-50), MTU (1380), OUT_DIR (vpn), WG_BIN (wg).
 #
 # Requires a kubectl context pointing at the cluster, and locally EITHER the `wg`
@@ -30,8 +30,8 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-wg-keys.sh"
 NAMESPACE="${NAMESPACE:-gross-view}"
 SECRET_NAME="${SECRET_NAME:-vpn-gateway-keys}"
 ENDPOINT="${ENDPOINT:-200.165.239.108:43210}"
-TUNNEL_PREFIX="${TUNNEL_PREFIX:-10.13.13}"
-SERVER_ADDRESS="${SERVER_ADDRESS:-10.13.13.1/24}"
+TUNNEL_PREFIX="${TUNNEL_PREFIX:-10.2.2}"
+SERVER_ADDRESS="${SERVER_ADDRESS:-10.2.2.3/24}"
 PEER_FIRST="${PEER_FIRST:-2}"
 PEER_LAST="${PEER_LAST:-50}"
 MTU="${MTU:-1380}"
@@ -126,12 +126,15 @@ cmd_add() {
     exit 1
   fi
 
-  # Pick the first free tunnel address.
-  local used addr octet
+  # Pick the first free tunnel address. The server's own address (e.g. 10.2.2.3)
+  # must never be handed out: since 2026-10-09 it lives in the same TUNNEL_PREFIX
+  # range as the peers.
+  local used addr octet server_ip
+  server_ip="${SERVER_ADDRESS%%/*}"
   used="$(secret_keys | awk -F'\t' '$1 ~ /^peer_.*_address$/ {print $2}' | while read -r v; do b64decode "$v"; done)"
   addr=""
   for ((octet = PEER_FIRST; octet <= PEER_LAST; octet++)); do
-    if ! grep -qx "${TUNNEL_PREFIX}.${octet}" <<< "$used"; then
+    if [[ "${TUNNEL_PREFIX}.${octet}" != "$server_ip" ]] && ! grep -qx "${TUNNEL_PREFIX}.${octet}" <<< "$used"; then
       addr="${TUNNEL_PREFIX}.${octet}"
       break
     fi
@@ -161,7 +164,7 @@ JSON
   cat > "$conf" <<CONF
 # WireGuard client config for the gross-view cluster VPN.
 # Created by scripts/vpn-peer.sh — DO NOT COMMIT, DO NOT SEND BY MAIL.
-# NOTE: the in-tunnel proxy ports (10.13.13.1:15432 postgres, 10.13.13.1:18200
+# NOTE: the in-tunnel proxy ports (10.2.2.3:15432 postgres, 10.2.2.3:18200
 # vault) were removed from the manifests 2026-10-07 — nothing listens inside
 # the tunnel yet, see docs/vpn-access-k8s.md.
 
