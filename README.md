@@ -390,7 +390,7 @@ curl.exe -I https://mint-box.ru
 │   └── gross-view/
 └── gross-view-realm.json
 ```
-sudo wg-quick up gross-view
-sudo wg show
-sudo wg-quick down gross-view
-nc -vz -u 200.165.239.108 43210
+```
+cat /vault/data/init.json
+```
+
