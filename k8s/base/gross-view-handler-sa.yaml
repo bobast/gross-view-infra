@@ -1,0 +1,19 @@
+# gross-view-handler — ServiceAccount (Vault identity for the prod profile).
+# The app authenticates to Vault with this account's Kubernetes token
+# (auth/kubernetes role `gross-view-handler`, provisioned by vault/entrypoint.sh;
+# policy `gross-view-handler-policy` grants read-only on
+# secret/gross-view-handler-prod, from which Spring Cloud Vault reads DB_USER /
+# DB_PASS — see docs/ESO-vault-k8s.md).
+#
+# The handler Deployment itself is still pending (phase 2 of
+# docs/opencode-mcp-integration.md), but the account is created up front: Vault's
+# role declares the exact `<namespace>/<name>` it accepts, so the binding is valid
+# the moment the workload lands. The account needs NO cluster permissions.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gross-view-handler
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: gross-view-handler
+    app.kubernetes.io/part-of: gross-view

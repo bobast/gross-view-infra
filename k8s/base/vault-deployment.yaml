@@ -43,6 +43,17 @@ spec:
               value: "eso-vault-auth"
             - name: ESO_BOUND_SA_NAMESPACE
               value: "gross-view"
+            # gross-view-handler (prod profile) Vault Kubernetes-auth identity. The
+            # defaults in vault/entrypoint.sh match these values; they are set
+            # explicitly here so the binding is auditable from the manifest alone.
+            - name: HANDLER_ROLE_NAME
+              value: "gross-view-handler"
+            - name: HANDLER_BOUND_SA_NAME
+              value: "gross-view-handler"
+            - name: HANDLER_BOUND_SA_NAMESPACE
+              value: "gross-view"
+            - name: HANDLER_POLICY_NAME
+              value: "gross-view-handler-policy"
             # Dev access over the VPN (docs/vpn-access-k8s.md). `optional: true` on
             # purpose: on an existing cluster the two keys may not be in Vault yet, and
             # a hard reference would keep the pod in CreateContainerConfigError. With

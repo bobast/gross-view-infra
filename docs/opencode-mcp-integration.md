@@ -289,9 +289,15 @@ persistent volume (PVC/volume opencode-data) и переживают перез�
 1. **Новые манифесты** `k8s/base/gross-view-api-deployment.yaml` +
    `gross-view-api-service.yaml` (Deployment `gross-view-api` + ClusterIP :8082,
    зеркало docker `handler`): image `gross-view.registry.twcstorage.ru/gross-view/gross-view-handler`,
-   env: `KEYCLOAK_URL=mint-box.ru`, `POSTGRES_URL=postgres:5432`,
-   `DB_USER/DB_PASS` из `gross-view-secrets` (`gv_db_user`/`gv_db_password`),
+   `serviceAccountName: gross-view-handler` — SA **уже создан**
+   (`k8s/base/gross-view-handler-sa.yaml`), он же идентичность в Vault,
+   env: `KEYCLOAK_URL=mint-box.ru`,
    `CREDENTIAL_ENCRYPTION_KEY`, `OPENCODE_BASE_URL=http://opencode.gross-view.svc.cluster.local:4096`.
+   ⚠️ **`DB_USER`/`DB_PASS` через env больше НЕ передаются** (2026-10-15): профиль `prod`
+   читает их из Vault по Kubernetes-auth (role `gross-view-handler` →
+   `secret/gross-view-handler-prod`, ключи `DB_USER`/`DB_PASS`/`POSTGRES_URL`). Роль и политика
+   `gross-view-handler-policy` уже провижинятся `vault/entrypoint.sh`; сам путь
+   `secret/gross-view-handler-prod` надо создать в Vault перед деплоем (он не засеивается).
    **Никаких `OPENCODE_SERVER_USERNAME/PASSWORD` у handler-а больше нет** — сервер
    opencode без собственной аутентификации (внутренняя сеть), вызовы идут со
    сквозным JWT. `MCP_URL=https://mint-box.ru/api/mcp`.

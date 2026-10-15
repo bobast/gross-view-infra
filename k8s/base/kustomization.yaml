@@ -20,6 +20,10 @@ resources:
   - gross-view-ui-deployment.yaml
   - gross-view-ui-service.yaml
   - vault-sa.yaml
+  # ServiceAccount identity the (phase-2) gross-view-handler workload uses to log
+  # in to Vault (auth/kubernetes role `gross-view-handler`). Created ahead of the
+  # Deployment so the Vault role binding is immediately usable.
+  - gross-view-handler-sa.yaml
   - vault-pvc.yaml
   - vault-deployment.yaml
   - vault-service.yaml

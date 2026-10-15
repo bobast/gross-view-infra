@@ -15,6 +15,9 @@
 #          from, so a fresh cluster gets `gross-view-secrets` with zero manual steps)
 #        - if running inside a pod (SA token present): Kubernetes auth method +
 #          role `eso-role` bound to the ESO ServiceAccount (see docs/ESO-vault-k8s.md)
+#        - policy `gross-view-handler-policy` (read-only on the handler's DB-credential
+#          paths secret/gross-view-handler{,-prod}) and, in a pod, Kubernetes auth
+#          role `gross-view-handler` bound to the app's own ServiceAccount
 #        - policy `dev-policy` (read/write secret/data/gross-view) + a `userpass`
 #          user for humans reaching Vault through the VPN (docs/vpn-access-k8s.md);
 #          the login is enabled only once `vault_userpass_password` on that path is
@@ -101,6 +104,29 @@ path "secret/metadata/*" {
 POLICY
 echo "[vault-entrypoint]   policy 'eso-policy' written"
 
+# The gross-view-handler app (prod profile) logs in with its OWN Kubernetes
+# ServiceAccount and must read ONLY its DB-credential path. Spring Cloud Vault
+# derives the KV path from `default-context` (secret/gross-view-handler-prod) and
+# additionally probes the `application-name` context (secret/gross-view-handler);
+# a path the token may not read answers 403 (not 404), which `fail-fast: true`
+# turns into a fatal startup error — so BOTH paths must be readable. No wildcards.
+HANDLER_POLICY_NAME="${HANDLER_POLICY_NAME:-gross-view-handler-policy}"
+vault policy write "$HANDLER_POLICY_NAME" - >/dev/null <<'POLICY'
+path "secret/data/gross-view-handler-prod" {
+  capabilities = ["read"]
+}
+path "secret/data/gross-view-handler" {
+  capabilities = ["read"]
+}
+path "secret/metadata/gross-view-handler-prod" {
+  capabilities = ["read"]
+}
+path "secret/metadata/gross-view-handler" {
+  capabilities = ["read"]
+}
+POLICY
+echo "[vault-entrypoint]   policy '$HANDLER_POLICY_NAME' written"
+
 # Kubernetes auth is only useful inside a real pod (has the SA token file).
 # In docker-compose there is no K8s, so this block is skipped automatically.
 if [ -f /var/run/secrets/kubernetes.io/serviceaccount/token ]; then
@@ -117,6 +143,16 @@ if [ -f /var/run/secrets/kubernetes.io/serviceaccount/token ]; then
     policies=eso-policy \
     ttl=1h >/dev/null
   echo "[vault-entrypoint]   kubernetes auth role '${ESO_ROLE_NAME:-eso-role}' written"
+  # The handler pod presents its own ServiceAccount token; the role is bound to
+  # exactly that account (see k8s/base/gross-view-handler-sa.yaml) and grants the
+  # read-only policy above. ttl=1h like the ESO role — the app reads its DB
+  # credentials once at startup and the token is renewable.
+  vault write "auth/kubernetes/role/${HANDLER_ROLE_NAME:-gross-view-handler}" \
+    bound_service_account_names="${HANDLER_BOUND_SA_NAME:-gross-view-handler}" \
+    bound_service_account_namespaces="${HANDLER_BOUND_SA_NAMESPACE:-gross-view}" \
+    policies="$HANDLER_POLICY_NAME" \
+    ttl=1h >/dev/null
+  echo "[vault-entrypoint]   kubernetes auth role '${HANDLER_ROLE_NAME:-gross-view-handler}' written"
 else
   echo "[vault-entrypoint]   no K8s SA token — skipping Kubernetes auth (docker)"
 fi
