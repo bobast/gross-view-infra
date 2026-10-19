@@ -147,45 +147,10 @@ services:
       keycloak_network:
         ipv4_address: 172.28.0.5
 
-  vault:
-    image: hashicorp/vault:1.18.4
-    entrypoint: ["/bin/sh", "/vault/entrypoint.sh"]
-    environment:
-      VAULT_ADDR: http://127.0.0.1:8200
-      VAULT_CONFIG_FILE: /vault/config/vault-config.hcl
-      VAULT_DATA_DIR: /vault/data
-      # Kubernetes-auth role config (used only inside a real pod; inert in docker).
-      ESO_ROLE_NAME: eso-role
-      ESO_BOUND_SA_NAME: eso-vault-auth
-      ESO_BOUND_SA_NAMESPACE: gross-view
-      # Dev login for Vault (policy dev-policy, read/write secret/gross-view).
-      # Left empty here the entrypoint keeps the userpass auth method DISABLED —
-      # see docs/vpn-access-k8s.md.
-      VAULT_USERPASS_USER: ${VAULT_USERPASS_USER:-vpn-dev}
-      VAULT_USERPASS_PASSWORD: ${VAULT_USERPASS_PASSWORD:-}
-    volumes:
-      # Auto-start bootstrap: init on first boot, auto-unseal on every boot.
-      - ./vault/entrypoint.sh:/vault/entrypoint.sh:ro
-      - ./vault/vault-config.hcl:/vault/config/vault-config.hcl:ro
-      # init.json (unseal key + root token) persists here; keep the volume safe.
-      - vault_data:/vault/data
-    networks:
-      keycloak_network:
-        ipv4_address: 172.28.0.6
-    restart: always
-    healthcheck:
-      test: ["CMD", "vault", "status"]
-      interval: 10s
-      retries: 5
-      start_period: 30s
-      timeout: 5s
-
 volumes:
   postgres_data:
     driver: local
   opencode_data:
-    driver: local
-  vault_data:
     driver: local
 
 networks:

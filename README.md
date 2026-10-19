@@ -100,7 +100,9 @@ TLS-хендшейк с `https://gross-view.local:443`). После каждог
 | keycloak   | 172.28.0.3    | 8080           | SSO / Identity Provider                   |
 | nginx      | 172.28.0.4    | 80, 443        | Reverse proxy (входная точка /sso, /api, /)|
 | opencode   | 172.28.0.5    | 4096           | AI coding agent (web UI)                  |
-| vault      | 172.28.0.6    | - (internal)   | HashiCorp Vault (источник секретов для ESO) |
+
+> Vault в docker-compose **удалён (2026-10-19)** — он работает только в Kubernetes
+> (`k8s/base/vault-*.yaml`, ClusterIP `vault.gross-view.svc.cluster.local:8200`).
 
 Внутренняя подсеть: `172.28.0.0/24` (bridge, keycloak_network).
 
