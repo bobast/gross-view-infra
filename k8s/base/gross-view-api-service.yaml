@@ -1,0 +1,20 @@
+# gross-view-api — Service (internal, ClusterIP).
+# Consumed by the main nginx proxy (`$gv_api_upstream` in nginx-configmap.yaml):
+# nginx connects to port 8082, the Spring Boot container listens on 8080
+# (`application-prod.yaml: server.port=8080`, context-path `/api`).
+apiVersion: v1
+kind: Service
+metadata:
+  name: gross-view-api
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: gross-view-api
+    app.kubernetes.io/part-of: gross-view
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: gross-view-api
+  ports:
+    - name: http
+      port: 8082
+      targetPort: http

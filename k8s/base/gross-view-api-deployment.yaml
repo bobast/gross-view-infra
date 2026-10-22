@@ -1,0 +1,126 @@
+# gross-view-api — Deployment (Spring Boot backend `gross-view-handler`).
+# Image `gross-view.registry.twcstorage.ru/gross-view/gross-view-handler` is built
+# from ../gross-view-handler (see its Dockerfile: context-path /api, port 8080,
+# merged truststore in JAVA_TOOL_OPTIONS). Behind the main nginx:
+#   location /api -> gross-view-api.gross-view.svc.cluster.local:8082 -> pod:8080
+#
+# Secrets: DB_USER / DB_PASS / POSTGRES_URL / CREDENTIAL_ENCRYPTION_KEY /
+# KEYCLOAK_CLIENT_ID / KEYCLOAK_CLIENT_SECRET live in Vault
+# secret/gross-view-handler-prod and are read by Spring Cloud Vault using the
+# ServiceAccount `gross-view-handler` (Kubernetes auth, `fail-fast: true`).
+#
+# Phase 1 deliberately runs with OPENCODE_ENABLED=false: the handler is fully
+# functional without the agent (chat endpoints report "not configured" without
+# 502). Phase 2 enables opencode after its own manifests/keys are fixed.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gross-view-api
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: gross-view-api
+    app.kubernetes.io/part-of: gross-view
+spec:
+  replicas: 1
+  # Liquibase runs on startup and mutates the schema, so two pods must never
+  # start concurrently. Recreate gives a clean stop -> migrate -> start rollout.
+  # Scale out later only after migrations are moved to a Job.
+  strategy:
+    type: Recreate
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gross-view-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gross-view-api
+        app.kubernetes.io/part-of: gross-view
+    spec:
+      serviceAccountName: gross-view-handler
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: gross-view-api
+          image: gross-view.registry.twcstorage.ru/gross-view/gross-view-handler:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: prod
+            # In-cluster Vault (Kubernetes auth, read-only policy
+            # gross-view-handler-policy -> secret/gross-view-handler-prod).
+            - name: SPRING_CLOUD_VAULT_URI
+              value: http://vault.gross-view.svc.cluster.local:8200
+            # Public issuer (validated against the `iss` claim) + in-cluster
+            # JWKS/token endpoints: avoids relying on hairpin access to the
+            # public LoadBalancer from inside the cluster.
+            - name: KEYCLOAK_URL
+              value: https://mint-box.ru/sso
+            - name: KEYCLOAK_TOKEN_URI
+              value: http://keycloak.gross-view.svc.cluster.local:8080/realms/gross-view-realm/protocol/openid-connect/token
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
+              value: http://keycloak.gross-view.svc.cluster.local:8080/realms/gross-view-realm/protocol/openid-connect/certs
+            # Canonical public MCP resource (RFC 9728): must match the URL the
+            # agent connects to, so it cannot be an in-cluster address.
+            - name: MCP_URL
+              value: https://mint-box.ru/api/mcp
+            - name: OPENAPI_SERVER_URL
+              value: https://mint-box.ru/api
+            - name: SBP_CALLBACK_URL
+              value: https://mint-box.ru/api/sbp/callback
+            # Phase 1: agent disabled. Remove once opencode manifests and
+            # provider keys are in place (docs/opencode-mcp-integration.md §6).
+            - name: OPENCODE_ENABLED
+              value: "false"
+            - name: OPENCODE_BASE_URL
+              value: http://opencode.gross-view.svc.cluster.local:4096
+            # JAVA_OPTS is applied by the image entrypoint (`sh -c "exec java
+            # $JAVA_OPTS ..."`). Do NOT override JAVA_TOOL_OPTIONS here: it
+            # carries the merged truststore (/app/truststore.p12) required for
+            # SBP/Keycloak TLS; dropping it causes PKIX errors.
+            - name: JAVA_OPTS
+              value: "-XX:InitialRAMPercentage=30 -XX:MaxRAMPercentage=60"
+          startupProbe:
+            httpGet:
+              path: /api/actuator/health/liveness
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /api/actuator/health/readiness
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /api/actuator/health/liveness
+              port: http
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+      imagePullSecrets:
+        - name: gross-view-registry

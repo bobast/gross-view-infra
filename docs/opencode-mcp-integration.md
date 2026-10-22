@@ -287,12 +287,12 @@ persistent volume (PVC/volume opencode-data) и переживают перез�
 ## 6. План доработок K8s (реализовано, применять при постановке API-деплоя)
 
 1. **Новые манифесты** `k8s/base/gross-view-api-deployment.yaml` +
-   `gross-view-api-service.yaml` (Deployment `gross-view-api` + ClusterIP :8082,
+   `gross-view-api-service.yaml` — ✅ созданы (Deployment `gross-view-api` + ClusterIP :8082,
    зеркало docker `handler`): image `gross-view.registry.twcstorage.ru/gross-view/gross-view-handler`,
    `serviceAccountName: gross-view-handler` — SA **уже создан**
    (`k8s/base/gross-view-handler-sa.yaml`), он же идентичность в Vault,
-   env: `KEYCLOAK_URL=mint-box.ru`,
-   `CREDENTIAL_ENCRYPTION_KEY`, `OPENCODE_BASE_URL=http://opencode.gross-view.svc.cluster.local:4096`.
+   env: `KEYCLOAK_URL=https://mint-box.ru/sso`,
+   `OPENCODE_BASE_URL=http://opencode.gross-view.svc.cluster.local:4096`.
    ⚠️ **`DB_USER`/`DB_PASS` через env больше НЕ передаются** (2026-10-15): профиль `prod`
    читает их из Vault по Kubernetes-auth (role `gross-view-handler` →
    `secret/gross-view-handler-prod`, ключи `DB_USER`/`DB_PASS`/`POSTGRES_URL`). Роль и политика
@@ -302,14 +302,16 @@ persistent volume (PVC/volume opencode-data) и переживают перез�
    opencode без собственной аутентификации (внутренняя сеть), вызовы идут со
    сквозным JWT. `MCP_URL=https://mint-box.ru/api/mcp`.
    (nginx в K8s **уже** резолвит `gross-view-api.gross-view.svc.cluster.local:8082`)
-2. **`kustomization.yaml`**: включить `gross-view-api-*.yaml`;
+   Этап 1: `OPENCODE_ENABLED=false`; readiness/liveness — actuator
+   `/api/actuator/health/{readiness,liveness}`.
+2. **`kustomization.yaml`**: ✅ `gross-view-api-*.yaml` включены;
    раскомментировать `opencode-deployment/service/pvc.yaml` и
-   `opencode-entrypoint-configmap.yaml`.
+   `opencode-entrypoint-configmap.yaml` — только на этапе 2.
 3. **`secret.yaml`**: ✅ сделано — удалены `opencode_server_username`,
    `opencode_server_password`, `keycloak_internal_url`, `opencode_agent_client_id`,
-   `opencode_agent_client_secret`. Остаются секреты БД, Keycloak, registry и прочие +
-   строки для `credential_encryption_key` и `keycloak_client_secret` (добавятся с
-   манифестами API).
+   `opencode_agent_client_secret`. Секреты API (DB_USER/DB_PASS/POSTGRES_URL,
+   `CREDENTIAL_ENCRYPTION_KEY`, `KEYCLOAK_CLIENT_ID/SECRET`) в ESO **не добавляются**:
+   handler читает их напрямую из Vault `secret/gross-view-handler-prod` (Kubernetes-auth).
 4. **`opencode-deployment.yaml`**: ✅ сделано — `initContainer wait-for-keycloak`
    **удалён** (entrypoint Keycloak не вызывает); env без OAuth-credentials и без
    статичного MCP-конфига (2026-09-24): только `BROWSER=none` + LLM-ключи

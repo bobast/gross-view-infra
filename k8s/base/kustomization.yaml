@@ -19,6 +19,11 @@ resources:
   - nginx-service.yaml
   - gross-view-ui-deployment.yaml
   - gross-view-ui-service.yaml
+  # Backend API (gross-view-handler). nginx routes /api here; see
+  # docs/opencode-mcp-integration.md §6 and gross-view-handler
+  # sketches/descriptions/k8s_deploy_plan.md.
+  - gross-view-api-deployment.yaml
+  - gross-view-api-service.yaml
   - vault-sa.yaml
   # ServiceAccount identity the (phase-2) gross-view-handler workload uses to log
   # in to Vault (auth/kubernetes role `gross-view-handler`). Created ahead of the
