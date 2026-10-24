@@ -50,9 +50,10 @@ resources:
   # docs/vpn-access-k8s.md §12 (the file was never committed before the removal).
   - vpn-gateway-proxy-configmap.yaml
   - vpn-gateway-deployment.yaml
-#  - opencode-deployment.yaml
-#  - opencode-service.yaml
-#  - opencode-pvc.yaml
+  - opencode-deployment.yaml
+  - opencode-service.yaml
+  - opencode-pvc.yaml
+  - opencode-entrypoint-configmap.yaml
   - certbot-pvc.yaml
   - certbot-rbac.yaml
   - certbot-cronjob.yaml

@@ -76,10 +76,8 @@ spec:
               value: https://mint-box.ru/api
             - name: SBP_CALLBACK_URL
               value: https://mint-box.ru/api/sbp/callback
-            # Phase 1: agent disabled. Remove once opencode manifests and
-            # provider keys are in place (docs/opencode-mcp-integration.md §6).
             - name: OPENCODE_ENABLED
-              value: "false"
+              value: "true"
             - name: OPENCODE_BASE_URL
               value: http://opencode.gross-view.svc.cluster.local:4096
             # JAVA_OPTS is applied by the image entrypoint (`sh -c "exec java
