@@ -80,6 +80,14 @@ spec:
               value: "true"
             - name: OPENCODE_BASE_URL
               value: http://opencode.gross-view.svc.cluster.local:4096
+            # Token Exchange для per-session MCP (RFC 8693), audience=mcp
+            - name: KEYCLOAK_CLIENT_ID
+              value: gross-view-handler-service
+            - name: KEYCLOAK_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: gross-view-secrets
+                  key: keycloak_handler_service_secret
             # JAVA_OPTS is applied by the image entrypoint (`sh -c "exec java
             # $JAVA_OPTS ..."`). Do NOT override JAVA_TOOL_OPTIONS here: it
             # carries the merged truststore (/app/truststore.p12) required for
