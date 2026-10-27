@@ -29,6 +29,40 @@ SKILL_DIR="$CONFIG_DIR/skills/mcp-first"
 SKILL_FILE="$SKILL_DIR/SKILL.md"
 
 # ---------------------------------------------------------------------------
+# LLM provider credentials sanity check
+# ---------------------------------------------------------------------------
+# Provider keys arrive as env vars (Vault -> ESO -> Secret `gross-view-secrets`
+# -> secretKeyRef, see k8s/base/opencode-deployment.yaml). A placeholder value
+# is TRUTHY, so opencode treats the provider as configured and the
+# misconfiguration only surfaces later as an opaque provider 401
+# ("Your api key: ****_KEY is invalid", diagnosed 2026-10-27). Warn loudly but
+# do NOT fail — a crash loop would hide the whole agent. Values are never
+# logged, only the variable name and the reason.
+check_provider_key() {
+  _name="$1"
+  _value="$2"
+  if [ -z "$_value" ]; then
+    echo "WARN: ${_name} is empty — the provider will report missing credentials" >&2
+    return 0
+  fi
+  case "$_value" in
+    changeme*|change_me*|REPLACE_WITH_*|*PLACEHOLDER*)
+      echo "WARN: ${_name} still holds a placeholder — LLM calls will fail with 401." >&2
+      echo "      Write the real key into secret/gross-view and run scripts/rotate-llm-key.sh" >&2
+      ;;
+  esac
+}
+check_provider_key DEEPSEEK_API_KEY "${DEEPSEEK_API_KEY:-}"
+check_provider_key OPENAI_API_KEY "${OPENAI_API_KEY:-}"
+check_provider_key ANTHROPIC_API_KEY "${ANTHROPIC_API_KEY:-}"
+check_provider_key OPENROUTER_API_KEY "${OPENROUTER_API_KEY:-}"
+check_provider_key GOOGLE_API_KEY "${GOOGLE_API_KEY:-}"
+check_provider_key GROQ_API_KEY "${GROQ_API_KEY:-}"
+check_provider_key MISTRAL_API_KEY "${MISTRAL_API_KEY:-}"
+check_provider_key XAI_API_KEY "${XAI_API_KEY:-}"
+unset _name _value
+
+# ---------------------------------------------------------------------------
 # Write opencode.json
 # ---------------------------------------------------------------------------
 mkdir -p "$CONFIG_DIR"

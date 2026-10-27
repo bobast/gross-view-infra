@@ -210,13 +210,22 @@ fi
 # replaces the deleted k8s/base/secret.yaml bootstrap Secret.
 if ! vault kv metadata get secret/gross-view >/dev/null 2>&1; then
   echo "[vault-entrypoint]   seeding bootstrap secret/data/gross-view for ESO"
+  # LLM provider keys are seeded EMPTY on purpose. A non-empty placeholder is
+  # truthy, so opencode (and any other client) treats the provider as
+  # configured and the misconfiguration only surfaces later as an opaque
+  # provider 401 — e.g. "Authentication Fails, Your api key: ****_KEY is
+  # invalid" (diagnosed 2026-10-27 on the deepseek key). Empty values make
+  # consumers report "missing credentials" instead. Set real keys with
+  # `vault kv patch secret/gross-view <provider>_api_key=...` or
+  # scripts/rotate-llm-key.sh (which also forces the ESO sync + opencode
+  # rollout, both required for the value to reach the model).
   SEED_FILE="$(mktemp)"
   cat > "$SEED_FILE" <<'SEED'
   {
-  "anthropic_api_key": "changeme",
-  "deepseek_api_key": "REPLACE_WITH_DEEPSEEK_API_KEY",
-  "google_api_key": "changeme",
-  "groq_api_key": "changeme",
+  "anthropic_api_key": "",
+  "deepseek_api_key": "",
+  "google_api_key": "",
+  "groq_api_key": "",
   "gv_db_name": "gross_view",
   "gv_db_password": "*Eg3#433@jzHeE",
   "gv_db_user": "gv_dba_user",
@@ -226,18 +235,18 @@ if ! vault kv metadata get secret/gross-view >/dev/null 2>&1; then
   "keycloak_admin": "kc_owner",
   "keycloak_admin_password": "#k*d@rt434wKpZ",
   "keycloak_internal_url": "http://keycloak.gross-view.svc.cluster.local:8080",
-  "mistral_api_key": "changeme",
+  "mistral_api_key": "",
   "n8n_db_name": "n8n",
   "n8n_db_password": "change_me",
   "n8n_db_user": "change_me",
   "n8n_encryption_key": "change_me",
-  "openai_api_key": "changeme",
+  "openai_api_key": "",
   "opencode_agent_client_id": "opencode-agent",
   "opencode_agent_client_secret": "changeme-opencode-agent",
   "opencode_password": "changeme",
   "opencode_server_password": "change_me",
   "opencode_server_username": "opencode",
-  "openrouter_api_key": "changeme",
+  "openrouter_api_key": "",
   "postgres_db": "postgres",
   "postgres_password": "Zf3tXQ%Yc^7K*T",
   "postgres_user": "change_me",
@@ -247,7 +256,7 @@ if ! vault kv metadata get secret/gross-view >/dev/null 2>&1; then
   "wg_peer_dns": "172.28.0.8",
   "wg_peers": "5",
   "wg_serverurl": "auto",
-  "xai_api_key": "changeme"
+  "xai_api_key": ""
   }
 SEED
   vault kv put secret/gross-view "@$SEED_FILE" >/dev/null

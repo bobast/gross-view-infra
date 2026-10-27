@@ -269,6 +269,16 @@ docker compose up -d opencode
 docker compose exec opencode printenv DEEPSEEK_API_KEY   # контроль (и аналогично для остальных <PROVIDER>_API_KEY)
 ```
 
+**В K8s путь длиннее** (диагноз 2026-10-27): ключ живёт в Vault (`secret/gross-view`,
+`<provider>_api_key`), ESO переносит его в Secret `gross-view-secrets`, а env пода
+фиксируется при **создании** контейнера. Ротация одной командой —
+`./scripts/rotate-llm-key.sh <provider> --from-env` (patch Vault → `force-sync` ESO →
+ожидание нового значения в Secret → `rollout restart deployment/opencode` → проверка
+env в поде); `--list` показывает дрейф env относительно Secret. Пропуск любого шага
+даёт «ключ в Vault есть, а модель отвечает `401 Authentication Fails, Your api key:
+****_KEY is invalid`» — разбор в AGENTS.md, note «LLM-ключи: от Vault до пода три
+pull-стадии».
+
 Handler дополнительно предоставляет REST-эндпоинты для подключения провайдеров
 моделей **в рантайме** (UI/API) — используются как альтернатива env, когда ключ
 меняется без пересоздания контейнера или провайдер подключён через OAuth:
@@ -638,6 +648,22 @@ deactivate Rest
 |---|---|---|---|
 | Токен для подключения — из заголовка запроса handler-а | §1 `Authorization: Bearer <JWT>`; §2 exchange/fолбэк; §3 токен в заголовках `POST /mcp`; §4 агент предъявляет его на `/api/mcp` | `McpSessionCredentialService#issueCredential` (`currentUserService.getAccessToken()` — JWT из `SecurityContextHolder`), `#headers()` (`Authorization` + `X-Workspace-Id`); `KeycloakAuthService#exchangeUserToken`; `OpenCodeClient#addMcpServer` (`POST /mcp`) | realm: `gross-view-handler-service` (confidential) + клиент-ресурс `mcp` (audience, scope `token-exchange`); `--features=token-exchange`; env `OPENCODE_MCP_TOKEN_EXCHANGE`; `.env.example`: `KEYCLOAK_CLIENT_ID/SECRET` |
 | Подключение в рамках сессии, изоляция от других сессий | §1/§3 `prepare(sessionId, workspaceId)`; §5 второй пользователь/сессия — отдельное подключение; §4 `Mcp-Session-Id` из токена; §6 `release` — демонтаж | `OpenCodeSessionService#prepareMcpConnection(sessionId, workspaceId)` перед каждым `sendMessage`; `McpSessionCredentialService#prepare(sessionId, workspaceId)` (ключ `OwnerScope(owner, sessionId, workspaceId)`), `#release(sessionId)` (registry clean + `removeAgentServer` в `deleteSession`/`abortSession`), `#serverName` (`gross-view-<workspaceId>-<userHash>-<sessionHash>`); демонтаж — `OpenCodeMcpService#removeRemoteServer` + `OpenCodeClient#deleteMcpServer` (`DELETE /mcp/{id}`); `McpSessionStore.bind` → `Mcp-Session-Id` | динамическая регистрация через `POST /mcp` (идемпотентна per-сессии); **статичный OAuth-сервер `gross-view` удалён из `opencode/entrypoint.sh`/compose/k8s (2026-09-24)** — в сессионном флоу участвует только локальный CLI (§3.1/§3.2) |
+
+> **Уточнение (актуальная реализация).** Схема из §9 эволюционировала: подключение
+> создаётся не на сессию, а на пару **«пользователь + пространство»**
+> (`McpSessionCredentialService#prepare(workspaceId)`, имя
+> `gross-view-<workspaceId>-<userHash>`), сессии переиспользуют его; `reconcile()`
+> убирает серверы прежней пер-сессионной схемы. Подробности — §12.9/§12.13
+> `../gross-view-handler/AGENTS.md`.
+>
+> **Живучесть регистрации (диагноз 2026-10-27).** opencode **не персистит**
+> MCP-регистрации: после рестарта пода `GET /mcp` возвращает `{}`, и панель
+> ассистента показывает «MCP-серверы не обнаружены». Handler компенсирует это —
+> `prepare()` сверяется с агентом (`serverNames()`/`GET /mcp`) и перерегистрирует
+> сервер на первом же запросе, поэтому рестарт opencode (в т.ч. ротация LLM-ключа
+> через `scripts/rotate-llm-key.sh`) ручных действий не требует. На образе
+> handler-а без этой правки — `kubectl -n gross-view rollout restart deployment/gross-view-api`
+> (чистит in-memory реестр учётных данных).
 
 ## 10. Аудит соответствия требованиям (2026-09-24)
 

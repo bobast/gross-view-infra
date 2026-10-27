@@ -144,10 +144,60 @@ KEYCLOAK_ADMIN_PASSWORD=
 1. Установите ESO-оператор (out-of-band, namespace `external-secrets`, server-side apply) — см. note про ESO в AGENTS.md. Без него `kubectl apply -k .` упадёт на неизвестных CRD.
 2. Создайте pull-secret `gross-view-registry` для доступа к реестру контейнеров (или подключите реестр к кластеру в панели Timeweb).
 3. Соберите и запушьте образ посадочной страницы `gross-view.registry.twcstorage.ru/gross-view/gross-view-ui:latest` (манифесты ссылаются на него).
-4. Примените манифесты из корня репозитория — `kubectl apply -k .`. Vault автозапуском засеет `secret/gross-view` dev-плейсхолдерами, ESO создаст из них Secret `gross-view-secrets`. Реальные значения положите в Vault (например: `kubectl -n gross-view exec deploy/vault -- vault kv put secret/gross-view deepseek_api_key=<REAL>`).
+4. Примените манифесты из корня репозитория — `kubectl apply -k .`. Vault автозапуском засеет `secret/gross-view` dev-плейсхолдерами, ESO создаст из них Secret `gross-view-secrets`. Реальные значения положите в Vault — для LLM-ключей через `./scripts/rotate-llm-key.sh` (см. подраздел «Ротация LLM-ключей» ниже: запись в Vault сама по себе до пода не доедет).
 5. Если менялась nginx-конфигурация (`k8s/base/nginx-configmap.yaml`) — перезапустите nginx, чтобы подобрать новый конфиг.
 6. Выпустите первый Let's Encrypt сертификат для `mint-box.ru`.
 7. Проверьте посадочную страницу.
+
+### Ротация LLM-ключей (DeepSeek и др.)
+
+Ключи провайдеров живут в Vault (`secret/gross-view`, свойства `<provider>_api_key`),
+ESO переносит их в Secret `gross-view-secrets`, а opencode читает их как env
+`<PROVIDER>_API_KEY`. Между записью в Vault и реальным применением **три pull-стадии**,
+и каждая молча оставляет старое значение:
+
+1. ESO синхронизирует Vault → Secret только по `refreshInterval: 1h` или по аннотации `force-sync`;
+2. `secretKeyRef` фиксируется при **создании** контейнера — обновление Secret не меняет env уже работающего пода;
+3. изменение Secret не триггерит rollout Deployment (в `k8s/base/opencode-deployment.yaml` для этого есть аннотация `gross-view/secret-version` — её бампают при ручной правке).
+
+Симптом «ключ в Vault есть, а модель отвечает `401 Authentication Fails, Your api key: ****_KEY is invalid`»
+(диагноз 2026-10-27) — это шаг 2/3: в поде остался bootstrap-плейсхолдер, а DeepSeek показывает
+последние 4 символа ключа (`_KEY` — хвост `REPLACE_WITH_DEEPSEEK_API_KEY`).
+
+Одна команда делает всё (Linux/bash):
+
+```bash
+# ключ из переменной окружения — не попадает в history и в argv
+DEEPSEEK_API_KEY='sk-...' ./scripts/rotate-llm-key.sh deepseek --from-env
+./scripts/rotate-llm-key.sh --list      # состояние всех провайдеров + дрейф env относительно Secret
+```
+
+Скрипт: `vault kv patch` (значение читается из stdin, RTOKEN берётся из `/vault/data/init.json` пода
+или `VAULT_TOKEN`) → `force-sync` на `ExternalSecret` → ожидание нового значения в Secret →
+`rollout restart deployment/opencode` → проверка env в новом поде. Флаги: `--dry-run`,
+`--skip-restart`, `--timeout <sec>`; провайдеры: `deepseek openai anthropic openrouter google groq mistral xai`.
+
+Вручную (Windows/PowerShell, без скрипта):
+
+```powershell
+kubectl -n gross-view exec deploy/vault -c vault -- vault kv patch secret/gross-view deepseek_api_key=<REAL>
+kubectl -n gross-view annotate externalsecret gross-view-secrets "force-sync=$(Get-Date -UFormat %s)" --overwrite
+kubectl -n gross-view get secret gross-view-secrets -o jsonpath='{.data.deepseek_api_key}'   # новый ключ доехал?
+kubectl -n gross-view rollout restart deployment/opencode
+kubectl -n gross-view rollout status deployment/opencode
+```
+
+Проверка: `kubectl -n gross-view exec deploy/opencode -- printenv DEEPSEEK_API_KEY` возвращает новый
+ключ (не пусто и не `REPLACE_WITH_…`). Запись ключа в Vault без `force-sync` и без рестарта пода —
+самая частая причина «ключ указан, но не применяется». Entrypoint opencode при старте пишет
+`WARN: <VAR> still holds a placeholder …`, если видит плейсхолдер, — это тот же диагноз в логах пода.
+
+⚠️ **Рестарт opencode сбрасывает MCP-регистрации.** Сервер `gross-view-<workspaceId>-<userHash>`
+создаётся handler-ом динамически (`POST /mcp`) и не персистится агентом, поэтому после любого
+пересоздания пода панель ассистента может показать «MCP-серверы не обнаружены». С 2026-10-27 handler
+сверяется с агентом в `McpSessionCredentialService.prepare()` и регистрирует сервер заново на первом
+же запросе (перезагрузите страницу ассистента). На образе handler-а без этой правки помогает
+`kubectl -n gross-view rollout restart deployment/gross-view-api`.
 
 ### VPN-доступ к postgres и vault (k8s)
 

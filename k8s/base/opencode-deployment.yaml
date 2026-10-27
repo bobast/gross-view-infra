@@ -21,6 +21,15 @@ spec:
       labels:
         app.kubernetes.io/name: opencode
         app.kubernetes.io/part-of: gross-view
+      annotations:
+        # Provider keys arrive from the `gross-view-secrets` Secret, and env vars
+        # are captured when the container is CREATED. ESO updating the Secret does
+        # NOT roll the pod, so the previous value keeps being sent and a key that
+        # IS in Vault shows up as "Your api key: ****_KEY is invalid" (diagnosed
+        # 2026-10-27 on DEEPSEEK_API_KEY). scripts/rotate-llm-key.sh restarts the
+        # Deployment for you; when a key is changed by hand, bump this value and
+        # run `kubectl apply -k .` (or `rollout restart deployment/opencode`).
+        gross-view/secret-version: "2026-10-27-1"
     spec:
       containers:
         - name: opencode
