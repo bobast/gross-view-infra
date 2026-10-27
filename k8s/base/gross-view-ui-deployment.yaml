@@ -48,9 +48,9 @@ spec:
           resources:
             requests:
               cpu: 50m
-              memory: 32Mi
-            limits:
-              cpu: 100m
               memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
       imagePullSecrets:
         - name: gross-view-registry

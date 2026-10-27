@@ -101,11 +101,11 @@ spec:
             failureThreshold: 10
           resources:
             requests:
-              cpu: 150m
-              memory: 448Mi
-            limits:
-              cpu: 200m
+              cpu: 300m
               memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1280Mi
   volumeClaimTemplates:
     - metadata:
         name: postgres-data

@@ -45,11 +45,11 @@ spec:
             # Init containers exit after bootstrap, so this does not add to the
             # steady-state memory footprint of the pod.
             requests:
-              cpu: 10m
-              memory: 16Mi
+              cpu: 20m
+              memory: 32Mi
             limits:
-              cpu: 100m
-              memory: 128Mi
+              cpu: 200m
+              memory: 256Mi
           volumeMounts:
             - name: tls-bootstrap
               mountPath: /shared
@@ -70,10 +70,10 @@ spec:
           resources:
             requests:
               cpu: 10m
-              memory: 8Mi
+              memory: 16Mi
             limits:
-              cpu: 50m
-              memory: 32Mi
+              cpu: 100m
+              memory: 64Mi
           volumeMounts:
             - name: tls-bootstrap
               mountPath: /shared
@@ -117,11 +117,11 @@ spec:
             timeoutSeconds: 5
           resources:
             requests:
-              cpu: 50m
-              memory: 32Mi
-            limits:
               cpu: 100m
               memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
       volumes:
         - name: nginx-config
           configMap:

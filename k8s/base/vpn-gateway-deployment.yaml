@@ -121,10 +121,10 @@ spec:
           resources:
             requests:
               cpu: 10m
-              memory: 16Mi
+              memory: 32Mi
             limits:
-              cpu: 100m
-              memory: 64Mi
+              cpu: 200m
+              memory: 128Mi
       containers:
         - name: wireguard
           image: dockerhub.timeweb.cloud/linuxserver/wireguard:latest
@@ -181,14 +181,15 @@ spec:
             failureThreshold: 3
           resources:
             requests:
-              cpu: 50m
-              memory: 64Mi
+              cpu: 100m
+              memory: 128Mi
             limits:
-              cpu: 200m
+              cpu: 500m
               # Higher than the old alpine container (128Mi): the image runs a full
               # s6-overlay + bash stack, whose resident memory is larger than a
-              # BusyBox loop. Watch the pod if raising further — the node has 2GB.
-              memory: 192Mi
+              # BusyBox loop. The node now has 8GB RAM (was 2GB), so the limit is
+              # raised along with the rest of the stack.
+              memory: 384Mi
         # nginx stream proxy: publishes the two VPN-only ports on the wg0 address
         # (postgres 15432, vault 18200). Both containers share the pod network
         # namespace, but they start in parallel: wait for wg0 to carry 10.2.2.3,
@@ -228,11 +229,11 @@ spec:
             failureThreshold: 4
           resources:
             requests:
-              cpu: 25m
-              memory: 32Mi
-            limits:
-              cpu: 100m
+              cpu: 50m
               memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
       volumes:
         - name: vpn-entrypoint
           configMap:
