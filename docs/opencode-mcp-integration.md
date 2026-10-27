@@ -67,11 +67,17 @@
 3. Клиент (opencode CLI) делает OIDC discovery → PKCE auth-code → JWT.
 4. `initialize {params: {workspace_id}}` → `WorkspaceService.resolveWorkspaceId()`:
    проверка членства по `preferred_username` (основной ключ) / `sub` из JWT →
-   `McpSessionStore.bind(sessionId, workspaceId, username)` → `Mcp-Session-Id`.
+   `McpSessionStore.bind(sessionId, workspaceId, username, userId, realmRoles)` → `Mcp-Session-Id`.
 5. `tools/call` и `resources/read` читают workspace из контекста сессии
-   (TTL 30 мин), **не из аргументов** (`workspace_id` из inputSchema удалён).
-6. Требуемая роль на `/api/mcp`: `MCP` / `DESIGNER` / `OZON_IMPORT` / `ANALYST` /
-   `ADMIN` (`@PreAuthorize("hasAnyRole(...)")`).
+   (TTL 30 мин), **не из аргументов** (`workspace_id` из inputSchema удалён);
+   `McpSessionStore.getOwned()` проверяет, что сессию предъявляет её владелец.
+6. Требования к `/api/mcp`: **достаточно аутентификации пользователя**
+   (`@PreAuthorize("isAuthenticated()")`). Realm-роли `MCP`/`DESIGNER`/`OZON_IMPORT`/
+   `ANALYST`/`ADMIN` больше не нужны; доступ к данным ограничивают членство в
+   пространстве (проверяется в `initialize` и повторно при каждом вызове) и роли
+   пространства, которые проверяют сами MCP-инструменты/ресурсы. Realm-роли из JWT
+   сохраняются в `McpSessionContext` и доступны инструментам через
+   `McpRequestContext.hasRealmRole(...)`.
 
 **Следствие для инфры:** workspace MCP-сессии определяется **субъектом JWT,
 который агент предъявляет на `/api/mcp`**. Для развёрнутого агента этот токен
@@ -89,9 +95,10 @@ opencode.json: { "mcp": { "gross-view": { "type": "remote",
 opencode mcp auth gross-view   # браузер -> Keycloak -> callback 127.0.0.1:19876
 ```
 Каждый пользователь получает **свой** JWT → свой workspace. Требования:
-публичный `mcp.url`/issuer синхронны, роль `MCP` на пользователе, realm-клиент
-`opencode-mcp` (public, callback `http://127.0.0.1:19876/mcp/oauth/callback`) — всё
-уже есть в `gross-view-realm.json`.
+публичный `mcp.url`/issuer синхронны, realm-клиент `opencode-mcp` (public, callback
+`http://127.0.0.1:19876/mcp/oauth/callback`) — всё уже есть в `gross-view-realm.json`.
+Realm-роль `MCP` для подключения **не требуется** (достаточно аутентификации и
+членства в рабочем пространстве); роль `MCP` осталась в realm как legacy.
 
 ### 3.2 Развёрнутый агент — per-session MCP (актуальная реализация, 2026-09-24)
 
@@ -223,7 +230,8 @@ KC=/opt/keycloak/bin/kcadm.sh   # внутри контейнера keycloak
 
 1. Проверить, что пользователь, который откроет чат, **является членом рабочего
    пространства** (роль `ANALYST` достаточна для финансовых MCP-инструментов;
-   `MCP`/`DESIGNER`/`OZON_IMPORT`/`ADMIN` — для доступа к `/api/mcp`). Членство
+   `ADMIN` — для админских операций пространства). Для самого подключения к
+   `/api/mcp` realm-роли не нужны — достаточно аутентификации. Членство
    заводится в handler-е через `/api/workspaces/.../invitations` или SQL в
    `workspace_member`.
 2. Запустить `./gradlew bootRun` handler-а на хосте (порт 8082) и поднять стек
