@@ -9,9 +9,13 @@
 # secret/gross-view-handler-prod and are read by Spring Cloud Vault using the
 # ServiceAccount `gross-view-handler` (Kubernetes auth, `fail-fast: true`).
 #
-# Phase 1 deliberately runs with OPENCODE_ENABLED=false: the handler is fully
-# functional without the agent (chat endpoints report "not configured" without
-# 502). Phase 2 enables opencode after its own manifests/keys are fixed.
+# The handler runs with OPENCODE_ENABLED=true: the agent is deployed in-cluster
+# (opencode.gross-view.svc.cluster.local:4096), and chat endpoints proxy to it.
+# Image tag is `:latest` with imagePullPolicy: Always, so a new registry push is
+# rolled out with
+#   kubectl -n gross-view rollout restart deployment/gross-view-api
+# (`kubectl apply -k .` alone does not recreate the pod: the pod template is
+# unchanged). See README "Push и ролл-аут образа gross-view-handler".
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -80,6 +84,19 @@ spec:
               value: "true"
             - name: OPENCODE_BASE_URL
               value: http://opencode.gross-view.svc.cluster.local:4096
+            # Enable per-user MCP registration on the shared agent.
+            #
+            # SECURITY: `POST /mcp` in opencode is process-global, so a
+            # per-user server (and the user's JWT in its headers) becomes
+            # visible to every chat session served by this agent. This is
+            # acceptable only for a single-user/single-tenant installation.
+            # For multi-tenant deployments keep it "false" and use a separate
+            # agent (or an MCP gateway) per user/workspace instead.
+            #
+            # Added temporarily to verify the MCP-tools-in-chat scenario after
+            # the handler rollout; see gross-view-handler AGENTS §8.14/§10.8.
+            - name: OPENCODE_MCP_SHARED_AGENT
+              value: "true"
             # Token Exchange для per-session MCP (RFC 8693), audience=mcp
             - name: KEYCLOAK_CLIENT_ID
               value: gross-view-handler-service

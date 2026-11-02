@@ -1,8 +1,22 @@
 # OpenCode ↔ gross-view MCP: integration plan (docker + k8s)
 
-> Обновлено: 2026-09-24. Описывает, как MCP-сервер gross-view-handler (`/api/mcp`)
+> Обновлено: 2026-10-30. Описывает, как MCP-сервер gross-view-handler (`/api/mcp`)
 > подключается к ИИ-агенту opencode, и все доработки инфраструктуры
 > (docker-compose и K8s-манифесты), необходимые для этого.
+>
+> **Изменение 2026-10-30:** K8s-часть §6 приведена к фактическому состоянию —
+> Deployment `gross-view-api` (`gross-view-handler:latest`, `OPENCODE_ENABLED=true`)
+> и opencode-манифесты включены в kustomization и работают; раскатка нового образа
+> handler-а — `kubectl -n gross-view rollout restart deployment/gross-view-api`
+> (`kubectl apply -k .` под не пересоздаёт, шаблон пода не меняется).
+>
+> **Изменение 2026-11-01 (актуальная схема):** handler регистрирует **одно**
+> MCP-подключение на пару «пользователь + пространство» —
+> `gross-view-<workspaceId>-<userHash>` (без `sessionHash`). Регистрация
+> включается `OPENCODE_MCP_SHARED_AGENT=true`; в профиле `debug` локальной
+> однопользовательской установки — по умолчанию. Описание per-session в §9 —
+> историческое; актуальные требования — `gross-view-handler/AGENTS.md`
+> §8.14/§12.13.
 >
 > **Изменение 2026-09-24 (доработка по R1/R2):** §9 переведён из плана в
 > реализацию — MCP-подключение теперь **каждой сессии** (не пары «пользователь +
@@ -302,7 +316,7 @@ persistent volume (PVC/volume opencode-data) и переживают перез�
 переживают перезапуски по определению и не попадают в volume — их источник —
 `.env`/Secret инфраструктуры.
 
-## 6. План доработок K8s (реализовано, применять при постановке API-деплоя)
+## 6. План доработок K8s (реализовано; Deployment `gross-view-api` живой с 2026-10-22)
 
 1. **Новые манифесты** `k8s/base/gross-view-api-deployment.yaml` +
    `gross-view-api-service.yaml` — ✅ созданы (Deployment `gross-view-api` + ClusterIP :8082,
@@ -320,11 +334,14 @@ persistent volume (PVC/volume opencode-data) и переживают перез�
    opencode без собственной аутентификации (внутренняя сеть), вызовы идут со
    сквозным JWT. `MCP_URL=https://mint-box.ru/api/mcp`.
    (nginx в K8s **уже** резолвит `gross-view-api.gross-view.svc.cluster.local:8082`)
-   Этап 1: `OPENCODE_ENABLED=false`; readiness/liveness — actuator
-   `/api/actuator/health/{readiness,liveness}`.
-2. **`kustomization.yaml`**: ✅ `gross-view-api-*.yaml` включены;
-   раскомментировать `opencode-deployment/service/pvc.yaml` и
-   `opencode-entrypoint-configmap.yaml` — только на этапе 2.
+   Deployment живёт с 2026-10-22 с `OPENCODE_ENABLED=true` и
+   `OPENCODE_BASE_URL=http://opencode.gross-view.svc.cluster.local:4096`; readiness/liveness — actuator
+   `/api/actuator/health/{readiness,liveness}`. Обновление образа: `docker push` в реестр Timeweb →
+   `kubectl -n gross-view rollout restart deployment/gross-view-api` (тег `:latest` +
+   `imagePullPolicy: Always`; `kubectl apply -k .` под не пересоздаёт), см. README
+   «Push и ролл-аут образа gross-view-handler».
+2. **`kustomization.yaml`**: ✅ `gross-view-api-*.yaml` включены; ✅ `opencode-deployment/service/pvc.yaml` и
+   `opencode-entrypoint-configmap.yaml` тоже включены (opencode работает в K8s с 2026-09-04).
 3. **`secret.yaml`**: ✅ сделано — удалены `opencode_server_username`,
    `opencode_server_password`, `keycloak_internal_url`, `opencode_agent_client_id`,
    `opencode_agent_client_secret`. Секреты API (DB_USER/DB_PASS/POSTGRES_URL,
@@ -351,9 +368,10 @@ persistent volume (PVC/volume opencode-data) и переживают перез�
    realm-импортом; на работающих кластерах — kcadm (см. §4.3). Легаси
    `opencode-agent`/сервис-аккаунт удалены из импорта. Keycloak запускается с
    `--features=token-exchange` (`keycloak-deployment.yaml` → `args`).
-7. **Бюджет ресурсов**: handler ≈ 200m CPU / 300–400Mi RAM requests. Ориентир узла
-   `~800m / ~1500Mi` будет превышен — поднять узел до 2 CPU или пересмотреть limits.
-8. Обновить AGENTS.md (расписание сервисов, таблица ресурсов).
+7. **Бюджет ресурсов**: ✅ фактически у `gross-view-api` — requests `500m` CPU / `1024Mi` RAM,
+   limits `1500m` / `1536Mi` (узел расширен до 4 CPU / 8 GB 2026-10-27; сводка — AGENTS.md
+   «Test cluster resource sizing»).
+8. ✅ AGENTS.md обновлён (расписание сервисов, таблица ресурсов, ролл-аут образа handler-а).
 
 ## 7. Связанные файлы handler-а (для справки)
 
@@ -710,6 +728,8 @@ deactivate Rest
   `opencode.json` — это осознанно: CLI вне сессионного флоу handler-а.
 - **Realm**: токен `mcp` (audience) и confidential-клиент `gross-view-handler-service`
   остаются обязательными; `opencode-mcp` (public) нужен только CLI.
-- **k8s**: opencode-манифесты по-прежнему закомментированы (phase 2); после
-  включения — новый entrypoint-ConfigMap и deployment env из §6 применяются
-  без дополнительных шагов.
+- **k8s**: манифесты `opencode` и `gross-view-api` **включены в kustomization и работают**
+  (opencode — Deployment с 2026-09-04; `gross-view-api` — с 2026-10-22); entrypoint-ConfigMap
+  и deployment env из §6 применяются без дополнительных шагов. После push нового образа
+  handler-а ролл-аут — `kubectl -n gross-view rollout restart deployment/gross-view-api`
+  (`kubectl apply -k .` под не пересоздаёт — шаблон пода не меняется).

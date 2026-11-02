@@ -99,11 +99,12 @@ services:
       # No server-side auth: the handler→opencode direction passes the real
       # user's JWT (attribution), not Basic auth — the server runs on the internal
       # network without its own credentials (gross-view-handler change).
-      # MCP-подключения НЕ настраиваются статично: для каждой сессии handler
-      # регистрирует изолированный сервер gross-view-<ws>-<userHash>-<sessionHash>
-      # через POST /mcp (Authorization: Bearer <mcp-jwt> + X-Workspace-Id) и снимает
-      # его по DELETE /mcp при завершении сессии. Статичный общий OAuth-сервер
-      # (OPENCODE_MCP_* envs) удалён 2026-09-24 — см. §9 docs/opencode-mcp-integration.md.
+      # MCP-подключения НЕ настраиваются статично: handler регистрирует ОДИН сервер
+      # на пару «пользователь + пространство» gross-view-<ws>-<userHash> через
+      # POST /mcp (Authorization: Bearer <mcp-jwt> + X-Workspace-Id), если на
+      # handler-е OPENCODE_MCP_SHARED_AGENT=true (в debug-профиле включено).
+      # Статичный общий OAuth-сервер (OPENCODE_MCP_* envs) удалён 2026-09-24 —
+      # см. §9 docs/opencode-mcp-integration.md.
       BROWSER: "none"
       # LLM provider keys come from the environment (no auth.json / /connect needed):
       # the opencode server reads <PROVIDER>_API_KEY directly as provider credentials.
@@ -116,7 +117,7 @@ services:
       MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
       XAI_API_KEY: ${XAI_API_KEY:-}
       # nginx terminates TLS for gross-view.local with a self-signed cert; the agent
-      # must trust it to reach the handler's /api/mcp (per-session MCP registration).
+      # must trust it to reach the handler's /api/mcp (MCP registration).
       NODE_EXTRA_CA_CERTS: /etc/ssl/gross-view/certs/gross-view.local.crt
     volumes:
       - opencode_data:/root/.config/opencode

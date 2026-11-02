@@ -2,14 +2,16 @@
 # SYNC NOTE: data.entrypoint.sh MUST stay identical to opencode/entrypoint.sh
 # (docker-compose) — they implement the same container startup:
 #   - writes /root/.config/opencode/opencode.json (default_agent mcp-first); MCP
-#     servers are NOT configured statically here — the handler registers an
-#     ISOLATED per-session server via POST /mcp (Authorization: Bearer <mcp-jwt>
-#     + X-Workspace-Id), named gross-view-<workspaceId>-<userHash>-<sessionHash>,
-#     and tears it down with DELETE /mcp (best-effort) when the session ends;
+#     servers are NOT configured statically here — the handler registers ONE
+#     server per (user, workspace) via POST /mcp (Authorization: Bearer <mcp-jwt>
+#     + X-Workspace-Id), named gross-view-<workspaceId>-<userHash>. Registration
+#     happens only when the handler runs with OPENCODE_MCP_SHARED_AGENT=true
+#     (default false: POST /mcp is process-global in opencode, so per-user servers
+#     are visible to every chat; the debug profile enables it for single-user);
 #   - writes the mcp-first agent definition and skill;
 #   - execs opencode web.
 # No static shared OAuth MCP server (no `opencode mcp auth gross-view`) — a shared
-# connection would violate per-session isolation. Local CLI users may still connect
+# connection would violate isolation. Local CLI users may still connect
 # manually through their own opencode.json (Keycloak public client 'opencode-mcp',
 # callback 127.0.0.1:19876).
 # Apply by enabling it in kustomization.yaml along with the opencode Deployment/Service/PVC.
@@ -30,15 +32,18 @@ data:
     # /root/.config/opencode/opencode.json, then execs `opencode web`.
     #
     # MCP-подключение агента к MCP-сервису handler-а (/api/mcp) НЕ настраивается здесь
-    # статично. Каждая сессия пользователя получает СОБСТВЕННЫЙ изолированный
-    # MCP-сервер, который динамически регистрирует gross-view-handler через
-    # POST /mcp с заголовками:
+    # статично. Одно подключение регистрируется на пару «пользователь + пространство»
+    # динамически gross-view-handler через POST /mcp с заголовками:
     #   Authorization: Bearer <mcp-jwt>
     #   X-Workspace-Id: <workspaceId>
     # (<mcp-jwt> выпускается handler-ом по токену из заголовка запроса пользователя —
-    # Keycloak Token Exchange RFC 8693, audience=mcp). Имя сервера детерминировано
-    # сессией: gross-view-<workspaceId>-<userHash>-<sessionHash>. При завершении сессии
-    # handler снимает подключение (DELETE /mcp, best-effort).
+    # Keycloak Token Exchange RFC 8693, audience=mcp). Имя сервера детерминировано парой:
+    # gross-view-<workspaceId>-<userHash>.
+    #
+    # Регистрация выполняется только при OPENCODE_MCP_SHARED_AGENT=true на handler-е
+    # (по умолчанию false: POST /mcp в opencode глобальный для процесса, поэтому
+    # per-user серверы видны всем диалогам; в debug-профиле локальной однопользовательской
+    # установки включено). Без этого инструментов gross-view-* в сессии нет.
     #
     # Статичного общего OAuth-сервера (opencode mcp auth gross-view) у развёрнутого
     # агента БОЛЬШЕ НЕТ — общий shared-контур нарушал изоляцию сессий. Локальный CLI
@@ -103,7 +108,7 @@ data:
       "default_agent": "mcp-first"
     }
     EOF
-    echo "==> opencode.json written (MCP-серверы регистрируются handler-ом per-session)"
+    echo "==> opencode.json written (MCP-сервер регистрируется handler-ом на пару пользователь+пространство)"
 
     # ---------------------------------------------------------------------------
     # Write mcp-first agent definition
@@ -137,10 +142,11 @@ data:
 
     1. **СНАЧАЛА — MCP-инструменты.** При ЛЮБОМ запросе пользователя:
        - Вызовите `list_accounts` или `get_account_plan` чтобы понять структуру данных
-       - Используйте специализированные отчёты: `get_profit_and_loss`, `get_balance_sheet`, `get_cash_flow`, `get_trial_balance`, `get_margin_analytics`, `get_cost_structure`
+       - Проводки журнала за период — `list_journal_entries` (фильтры: `documentId`, `operationId`, `accountCode`, аналитики, лимит); `returned=0, hasMore=false` означает, что проводок нет
+       - Используйте специализированные отчёты: `get_profit_and_loss`, `get_balance_sheet`, `get_cash_flow`, `get_trial_balance`, `get_margin_analytics`, `get_cost_structure`, `get_product_cost_structure`
        - Для фильтрации по аналитикам: `list_journal_analytics`, `list_report_analytics`
        - Никогда не вычисляйте данные вручную, не генерируйте код для расчётов — MCP-сервер уже предоставляет всё необходимое
-       - MCP-серверы подключены per-session и носят префикс `gross-view-<workspaceId>-<userHash>-<sessionHash>_<tool>` — ищите доступные инструменты в текущей сессии по суффиксу имени (например `..._get_account_plan`), не по статичному имени `gross-view`
+       - MCP-сервер подключён handler-ом на пару «пользователь + пространство» и носит префикс `gross-view-<workspaceId>-<userHash>_<tool>` — ищите доступные инструменты в текущей сессии по суффиксу имени (например `..._get_account_plan`), не по статичному имени `gross-view`. Если таких инструментов нет вообще — MCP отключён на handler-е (`OPENCODE_MCP_SHARED_AGENT=false`) или сервер ещё не зарегистрирован
     2. **ЧТЕНИЕ** — только если MCP-результат требует дополнительного контекста из репозитория
     3. **ЗАПРОС ПОЛЬЗОВАТЕЛЮ** — если непонятно, какой инструмент вызвать
     4. **КОД** — только для трансформаций/визуализации, которых нет в MCP
@@ -168,26 +174,78 @@ data:
 
     # Справочник MCP-инструментов gross-view
 
-    MCP-серверы подключаются динамически для каждой сессии с именем
-    `gross-view-<workspaceId>-<userHash>-<sessionHash>`; инструменты в текущей сессии
-    доступны с этим префиксом (`<server>_<tool>`). Ниже — базовые имена (суффиксы):
+    MCP-сервер подключается handler-ом динамически на пару «пользователь +
+    пространство» и носит имя `gross-view-<workspaceId>-<userHash>`; инструменты
+    в текущей сессии доступны с префиксом `<server>_<tool>` (например
+    `gross-view-..._list_accounts`). Если инструментов с таким префиксом нет вообще —
+    MCP отключён на handler-е (`OPENCODE_MCP_SHARED_AGENT=false`, безопасный режим
+    мультитенантной установки) либо сервер ещё не зарегистрирован; это не ошибка
+    истёкшей сессии.
 
     | Инструмент | Назначение |
     |---|---|
-    | `list_accounts` | Список всех счетов плана (id, код, описание) |
-    | `get_account_plan` | Текущий план счетов (read-only): счета, операции с дебетом/кредитом, аналитики |
+    | `list_accounts` | Счета плана (id, код, описание, тип) |
+    | `get_account_plan` | Текущий план: счета и операции (read-only) |
     | `query_account_plan` | Синхронизация плана счетов (write) |
-    | `get_profit_and_loss` | Отчёт о прибылях и убытках за период с разбиением по аналитикам |
-    | `get_balance_sheet` | Бухгалтерский баланс на отчётную дату (активы, обязательства, капитал) |
-    | `get_cash_flow` | Отчёт о движении денежных средств (поступления/выбытия по денежным счетам) |
-    | `get_trial_balance` | Оборотно-сальдовая ведомость по счетам за период |
-    | `get_margin_analytics` | Экспресс-аналитика себестоимости и маржинальности (KPI, динамика, структура затрат) |
-    | `get_cost_structure` | Структура себестоимости за период (закупочная стоимость, ТЗР, услуги) |
-    | `list_journal_analytics` | Уникальные значения аналитик из журнала проводок |
-    | `list_report_analytics` | Справочник аналитик для фильтра P&L |
-    | `sync_accounting_policies` | Синхронизация учётных политик (write) |
+    | `sync_accounting_policies` | Совместная синхронизация учётных политик (write) |
     | `delete_account_plan` | Удаление плана счетов (write) |
-    | `cleanup_orphaned_journal_entries` | Очистка осиротевших проводок (write) |
+    | `cleanup_orphaned_journal_entries` | Очистка осиротевших проводок (write, ADMIN) |
+    | `get_profit_and_loss` | P&L за период в разрезе аналитик |
+    | `get_balance_sheet` | Бухгалтерский баланс на отчётную дату |
+    | `get_cash_flow` | Движение денежных средств за период |
+    | `get_trial_balance` | Оборотно-сальдовая ведомость по счетам |
+    | `get_cost_structure` | Структура себестоимости по статьям затрат |
+    | `get_product_cost_structure` | Затраты и прибыль в разрезе SKU/offerId |
+    | `get_margin_analytics` | KPI и динамика маржинальности |
+    | `list_journal_entries` | **Проводки журнала за период** (фильтры: документ, операция, план, счёт, аналитики; лимит) |
+    | `delete_journal_entries` | Удаление проводок периода (write, ADMIN; по умолчанию dryRun) |
+    | `list_journal_analytics` | Значения аналитик журнала по всем пространствам пользователя |
+    | `list_report_analytics` | Справочник аналитик для фильтра P&L |
+    | `build_financial_report` | Отчёт в виде таблицы/диаграммы (ReportView) |
+    | `list_report_views` | Справочник видов отчётов и диаграмм |
+    | `import_ozon_finance` | Импорт начислений Ozon (write) |
+    | `import_ozon_fbo` | Импорт отправлений FBO (write) |
+    | `import_first_mile_batches` | Регистрация партий первой мили (write) |
+    | `list_first_mile_batches` | Остатки партий FIFO |
+    | `upsert_product_prices` | Закупочные цены (write) |
+    | `list_product_prices` | Закупочные цены |
+    | `analyze_document_file` | Распознавание типа документа по заголовкам |
+    | `ensure_typical_operations` | Копирование типовых операций (write) |
+    | `extend_typical_operations` | Расширение операций аналитиками (write) |
+    | `list_document_types` | Профили табличных типов документов |
+    | `preview_document_import` | Предпросмотр импорта (dry-run) |
+    | `import_document_rows` | Импорт строк документа (write) |
+    | `ensure_report_policy` | Применить политику по типу отчёта (write) |
+    | `get_report_context` | Сохранённый контекст отчёта 1С |
+    | `save_report_context` | Сохранить период/организацию (write) |
+    | `get_data_coverage` | Покрытие данных за период |
+    | `list_report_templates` | Шаблоны раскладки 1С |
+    | `save_report_template` | Сохранить шаблон (write) |
+    | `delete_report_template` | Удалить шаблон (write) |
+    | `preview_report_template` | Предпросмотр импорта с шаблоном |
+    | `import_report_rows` | Импорт с шаблоном (write) |
+    | `get_inventory_balance` | Остатки субледжера запасов |
+    | `rebuild_inventory_subledger` | Пересобрать FIFO-слои (write, ADMIN) |
+    | `get_account_balances` | Снапшоты сальдо/оборотов по счетам |
+    | `rebuild_account_balances` | Пересобрать снапшоты (write, ADMIN) |
+    | `get_ledger_integrity` | Проверка целостности журнала |
+    | `list_journal_events` | Журнал аудита изменений |
+    | `list_accounting_periods` | Учётные периоды |
+    | `create_accounting_period` | Создать период (write, ADMIN) |
+    | `close_accounting_period` | Закрыть период (write, ADMIN) |
+    | `reopen_accounting_period` | Переоткрыть период (write, ADMIN) |
+    | `list_ozon_keys` | Ключи Ozon (метаданные, без секретов) |
+    | `check_ozon_keys` | Проверка методов ключей Ozon |
+    | `create_ozon_key` | Создать ключ Ozon (write) |
+    | `refresh_ozon_key` | Обновить срок действия ключа (write) |
+    | `delete_ozon_key` | Удалить ключ Ozon (write) |
+    | `list_currencies` | Справочник валют ISO 4217 |
+    | `list_exchange_rates` | Курсы ЦБ РФ на дату |
+    | `get_exchange_rate` | Курс валюты |
+    | `convert_to_rub` | Конвертация суммы в RUB |
+    | `list_llm_tariffs` | Тарифы LLM-моделей |
+    | `sync_exchange_rates` | Обновить курсы (platform ADMIN) |
+    | `sync_llm_tariffs` | Обновить тарифы LLM (platform ADMIN) |
 
     При финансовом запросе ВСЕГДА вызывайте инструменты первыми. Не генерируйте код для расчёта того, что уже считает MCP.
     SKILLEOF

@@ -233,7 +233,7 @@ kubectl -n gross-view rollout restart deployment/vpn-gateway
 docker login gross-view.registry.twcstorage.ru
 ```
 
-Доступ к приватному реестру из K8s задаётся через `imagePullSecrets`: Deployment ссылается на Secret `gross-view-registry` (см. `k8s/base/gross-view-ui-deployment.yaml`). Секрет создаётся либо командой:
+Доступ к приватному реестру из K8s задаётся через `imagePullSecrets`: Deployment ссылается на Secret `gross-view-registry` (см. `k8s/base/gross-view-ui-deployment.yaml` и `k8s/base/gross-view-api-deployment.yaml`). Секрет создаётся либо командой:
 
 ```bash
 kubectl -n gross-view create secret docker-registry gross-view-registry \
@@ -244,7 +244,7 @@ kubectl -n gross-view create secret docker-registry gross-view-registry \
 
 либо автоматически при подключении реестра к кластеру в панели Timeweb (вкладка «Управление» кластера) — тогда имя созданного секрета может отличаться, поправьте его в `imagePullSecrets`.
 
-**Диагностика ошибки `401 Unauthorized` при pull (2026-09-13).** Симптом: под gross-view-ui в `ImagePullBackOff`, событие пода `Failed to pull image "...": failed to fetch anonymous token ... api.timeweb.cloud/api/v1/k8s/cr-auth ...: 401 Unauthorized`. Причина — Secret `gross-view-registry` не создан в кластере (kubelet тянет образ без кред), не путать с неверным токеном. Проверка: `kubectl -n gross-view get secrets` — секрета нет, и в событиях пода есть `FailedToRetrieveImagePullSecret ... Unable to retrieve some image pull secrets (gross-view-registry)`. Лечится созданием секрета командой выше (`kubectl create secret docker-registry gross-view-registry ...`). Имя секрета должно ровно совпадать со значением `imagePullSecrets` в `k8s/base/gross-view-ui-deployment.yaml`.
+**Диагностика ошибки `401 Unauthorized` при pull (2026-09-13).** Симптом: под gross-view-ui в `ImagePullBackOff`, событие пода `Failed to pull image "...": failed to fetch anonymous token ... api.timeweb.cloud/api/v1/k8s/cr-auth ...: 401 Unauthorized`. Причина — Secret `gross-view-registry` не создан в кластере (kubelet тянет образ без кред), не путать с неверным токеном. Проверка: `kubectl -n gross-view get secrets` — секрета нет, и в событиях пода есть `FailedToRetrieveImagePullSecret ... Unable to retrieve some image pull secrets (gross-view-registry)`. Лечится созданием секрета командой выше (`kubectl create secret docker-registry gross-view-registry ...`). Имя секрета должно ровно совпадать со значением `imagePullSecrets` в `k8s/base/gross-view-ui-deployment.yaml` и `k8s/base/gross-view-api-deployment.yaml`.
 
 ### Push образа gross-view-ui в кластер
 
@@ -259,6 +259,50 @@ docker push gross-view.registry.twcstorage.ru/gross-view/gross-view-ui:latest
 ```bash
 kubectl -n gross-view rollout restart deployment/gross-view-ui
 ```
+
+### Push и ролл-аут образа gross-view-handler (K8s)
+
+Бэкенд `gross-view-api` использует образ `gross-view.registry.twcstorage.ru/gross-view/gross-view-handler:latest`
+(`k8s/base/gross-view-api-deployment.yaml`); образ собирается из соседнего репозитория `../gross-view-handler`.
+Публикация = push в реестр Timeweb, а подхват нового образа = **перезапуск Deployment**: `imagePullPolicy: Always`
+заставляет kubelet заново сходить в реестр при создании контейнера.
+
+```bash
+cd ../gross-view-handler
+docker build -t gross-view.registry.twcstorage.ru/gross-view/gross-view-handler:latest .
+docker push gross-view.registry.twcstorage.ru/gross-view/gross-view-handler:latest
+
+kubectl -n gross-view rollout restart deployment/gross-view-api
+kubectl -n gross-view rollout status deployment/gross-view-api
+```
+
+То же в PowerShell (`Set-Location` + те же команды):
+
+```powershell
+Set-Location ..\gross-view-handler
+docker build -t gross-view.registry.twcstorage.ru/gross-view/gross-view-handler:latest .
+docker push gross-view.registry.twcstorage.ru/gross-view/gross-view-handler:latest
+
+kubectl -n gross-view rollout restart deployment/gross-view-api
+kubectl -n gross-view rollout status deployment/gross-view-api
+```
+
+Проверка, что запустился именно новый образ (у тега `:latest` меняется только digest):
+
+```bash
+kubectl -n gross-view get pod -l app.kubernetes.io/name=gross-view-api \
+  -o jsonpath='{.items[0].status.containerStatuses[0].imageID}{"\n"}'
+```
+
+⚠️ `kubectl apply -k .` ролл-аут **не запускает**: шаблон пода в манифесте не меняется, поэтому Deployment
+остаётся прежним и под не пересоздаётся — нужен явный `rollout restart`.
+
+⚠️ У `gross-view-api` `strategy: Recreate` (Liquibase на старте не должен идти с двух подов одновременно),
+поэтому во время ролл-аута `/api` недоступен, пока новый под не пройдёт `startupProbe` (до ~5 минут холодного
+старта Spring Boot). `revisionHistoryLimit: 2` (единственный Deployment с ненулевым значением) позволяет
+`kubectl -n gross-view rollout undo deployment/gross-view-api`, но при теге `:latest` откат вернёт только
+предыдущий шаблон, не предыдущий образ — для настоящего отката публикуйте версионированный тег и меняйте
+`image:` в манифесте.
 
 Команды для Linux и Windows даны ниже; каждая команда — в отдельном блоке для удобного копирования.
 
@@ -425,7 +469,7 @@ kubectl logs -f job/certbot-bootstrap -n gross-view
 curl.exe -I https://mint-box.ru
 ```
 
-Соответствие сервисов: postgres → StatefulSet, keycloak → Deployment, nginx → Deployment + LoadBalancer (80/443, TLS-терминация для mint-box.ru), gross-view-ui → Deployment + ClusterIP (статическая SPA-посадочная страница, образ `gross-view.registry.twcstorage.ru/gross-view/gross-view-ui:latest`, pull через `imagePullSecrets` → Secret `gross-view-registry`), opencode → Deployment, certbot → CronJob (Let's Encrypt, HTTP-01/webroot, ежедневное обновление → Secret `mint-box-tls` + рестарт nginx). Тема и realm Keycloak встраиваются в ConfigMap через `configMapGenerator` в корневом `kustomization.yaml`. Требуются DNS-записи `mint-box.ru`/`www.mint-box.ru` на внешний IP ноды и доступный порт 80.
+Соответствие сервисов: postgres → StatefulSet, keycloak → Deployment, nginx → Deployment + LoadBalancer (80/443, TLS-терминация для mint-box.ru), gross-view-ui → Deployment + ClusterIP (статическая SPA-посадочная страница, образ `gross-view.registry.twcstorage.ru/gross-view/gross-view-ui:latest`, pull через `imagePullSecrets` → Secret `gross-view-registry`), gross-view-api → Deployment + ClusterIP (бэкенд `gross-view-handler`, образ `gross-view.registry.twcstorage.ru/gross-view/gross-view-handler:latest`, ролл-аут после push — `rollout restart deployment/gross-view-api`, см. раздел «Push и ролл-аут образа gross-view-handler»), opencode → Deployment, certbot → CronJob (Let's Encrypt, HTTP-01/webroot, ежедневное обновление → Secret `mint-box-tls` + рестарт nginx). Тема и realm Keycloak встраиваются в ConfigMap через `configMapGenerator` в корневом `kustomization.yaml`. Требуются DNS-записи `mint-box.ru`/`www.mint-box.ru` на внешний IP ноды и доступный порт 80.
 
 ## Структура
 
