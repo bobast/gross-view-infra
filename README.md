@@ -513,6 +513,8 @@ kubectl -n gross-view port-forward svc/mail 18080:8080
 http://127.0.0.1:18080/admin
 ```
 
+Stalwart WebUI использует first-party OAuth и по IP/HTTP не распознаёт себя как first-party client. Поэтому для VPN-админки в Stalwart создан OAuth-клиент `stalwart-webui-vpn` (`firstParty: true`, redirect URIs `http://10.2.2.3:18080/admin/oauth/callback` и `http://10.2.2.3:18080/account/oauth/callback`), а `Application.oauthClientId` указывает на него. Без этого открытие `/admin` по IP даёт `Unknown client id`. Если БД Stalwart будет пересоздана, клиент и привязку `Application.oauthClientId` нужно создать заново (это состояние живёт в PostgreSQL, не в манифестах).
+
 Логи Stalwart пишутся в файл внутри pod:
 
 ```bash
@@ -539,6 +541,8 @@ openssl s_client -connect 200.165.239.108:993 -servername mx.mint-box.ru -brief
 Живой realm `gross-view-realm` настроен на `mx.mint-box.ru:587` со STARTTLS, отправитель `no.reply@mint-box.ru`, reply-to `gi.pavlov@mint-box.ru`. Пароль хранится в Vault (`secret/mail/noreply_password`), в `gross-view-realm.json` он не коммитится — после импорта realm на свежем кластере SMTP-пароль нужно задать вручную через admin console/`kcadm.sh`.
 
 Внутренний `mail.gross-view.svc.cluster.local:2525` (без TLS, AUTH разрешён только на этом порту) остаётся запасным вариантом на случай проблем с внешним DNS/сертификатом.
+
+Регистрация требует подтверждения email: в realm включён `verifyEmail`, поэтому новый пользователь получает required action `VERIFY_EMAIL` и не может войти, пока не перейдёт по ссылке из письма. Ссылка «Забыли пароль?» включена (`resetPasswordAllowed`), письмо для сброса отправляется тем же SMTP. Обе настройки заданы в `gross-view-realm.json` и уже включены на живом realm (проверено 2026-11-04); на существующем realm правка JSON не применяется автоматически — переключайте через admin console (Realm Settings → Login) или `kcadm.sh update realms/gross-view-realm -s verifyEmail=true -s resetPasswordAllowed=true`.
 
 ## Структура
 
