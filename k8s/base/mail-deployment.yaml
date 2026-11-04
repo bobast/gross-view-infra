@@ -1,0 +1,164 @@
+# Stalwart mail server - Deployment.
+#
+# Single replica on the single-node cluster. Mail data lives in PostgreSQL
+# (see mail-configmap.yaml), so the pod itself is stateless: /var/lib/stalwart
+# is an emptyDir used only for caches/temporary files, and the only persistent
+# state is the `stalwart` database.
+#
+# Ports 25/465/587/993 are exposed directly on the node with hostPort, the
+# same pattern as nginx:80 and vpn-gateway:43210. The Timeweb LoadBalancer is
+# not involved (its public IP has no PTR, while the node IP does).
+#
+# Bootstrap note: the initial configuration was applied while the server ran
+# with STALWART_RECOVERY_MODE=1 (management listener on 8080). The recovery
+# variables have been removed; normal operation now uses the listeners stored
+# in PostgreSQL. `gi.pavlov@mint-box.ru` is the permanent administrator, so no
+# recovery administrator needs to stay in the environment.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mail
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: mail
+    app.kubernetes.io/part-of: gross-view
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mail
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mail
+        app.kubernetes.io/part-of: gross-view
+    spec:
+      securityContext:
+        runAsUser: 2000
+        runAsGroup: 2000
+        fsGroup: 2000
+        fsGroupChangePolicy: OnRootMismatch
+      initContainers:
+        - name: wait-for-postgres
+          image: dockerhub.timeweb.cloud/library/alpine:3.20
+          command:
+            - sh
+            - -c
+            - |
+              until nc -w 2 postgres 5432 </dev/null; do
+                echo "waiting for postgres:5432"
+                sleep 2
+              done
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+      containers:
+        - name: stalwart
+          image: dockerhub.timeweb.cloud/stalwartlabs/stalwart:v1.0.2
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: STALWART_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gross-view-secrets
+                  key: stalwart_db_password
+            - name: STALWART_HOSTNAME
+              value: mx.mint-box.ru
+            - name: STALWART_PUBLIC_URL
+              value: https://mx.mint-box.ru
+          ports:
+            - name: smtp
+              containerPort: 25
+              hostPort: 25
+              protocol: TCP
+            - name: submissions
+              containerPort: 465
+              hostPort: 465
+              protocol: TCP
+            - name: submission
+              containerPort: 587
+              hostPort: 587
+              protocol: TCP
+            # Cluster-only submission listener for in-cluster consumers
+            # (Keycloak). It is not published on the node; cleartext AUTH is
+            # allowed only on this port (see MtaStageAuth in Stalwart).
+            - name: submission-int
+              containerPort: 2525
+              protocol: TCP
+            - name: imaps
+              containerPort: 993
+              hostPort: 993
+              protocol: TCP
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /etc/stalwart/config.json
+              subPath: config.json
+              readOnly: true
+            - name: tls
+              mountPath: /etc/stalwart/certs
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/stalwart
+            - name: logs
+              mountPath: /var/log/stalwart
+            - name: tmp
+              mountPath: /tmp
+          startupProbe:
+            httpGet:
+              path: /healthz/live
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /healthz/live
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz/live
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_BIND_SERVICE
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: config
+          configMap:
+            name: mail-config
+        - name: tls
+          secret:
+            secretName: mail-tls
+        - name: data
+          emptyDir: {}
+        - name: logs
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

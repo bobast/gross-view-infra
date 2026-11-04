@@ -250,6 +250,9 @@ if ! vault kv metadata get secret/gross-view >/dev/null 2>&1; then
   "postgres_db": "postgres",
   "postgres_password": "Zf3tXQ%Yc^7K*T",
   "postgres_user": "change_me",
+  "stalwart_db_name": "stalwart",
+  "stalwart_db_password": "change_me_stalwart",
+  "stalwart_db_user": "stalwart",
   "vault_userpass_password": "change_me",
   "vault_userpass_username": "vpn-dev",
   "wg_internal_subnet": "10.13.13.0",
@@ -263,6 +266,27 @@ SEED
   rm -f "$SEED_FILE"
 else
   echo "[vault-entrypoint]   secret/data/gross-view already exists (leaving untouched)"
+fi
+
+# Mail-specific credentials (Stalwart admin + mailbox passwords). Kept on a
+# separate Vault path so the main `gross-view-secrets` Secret does not carry
+# mailbox passwords. Seeded only when absent; replace the placeholders before
+# using the mail service for real mail.
+if ! vault kv metadata get secret/mail >/dev/null 2>&1; then
+  echo "[vault-entrypoint]   seeding bootstrap secret/data/mail for ESO"
+  MAIL_SEED_FILE="$(mktemp)"
+  cat > "$MAIL_SEED_FILE" <<'SEED'
+  {
+  "admin_password": "change_me",
+  "noreply_password": "change_me",
+  "pavlov_password": "change_me",
+  "recovery_admin": "admin:change_me"
+  }
+SEED
+  vault kv put secret/mail "@$MAIL_SEED_FILE" >/dev/null
+  rm -f "$MAIL_SEED_FILE"
+else
+  echo "[vault-entrypoint]   secret/data/mail already exists (leaving untouched)"
 fi
 
 echo "[vault-entrypoint] ready; keeping vault server in the foreground"

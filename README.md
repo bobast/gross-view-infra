@@ -469,7 +469,76 @@ kubectl logs -f job/certbot-bootstrap -n gross-view
 curl.exe -I https://mint-box.ru
 ```
 
-Соответствие сервисов: postgres → StatefulSet, keycloak → Deployment, nginx → Deployment + LoadBalancer (80/443, TLS-терминация для mint-box.ru), gross-view-ui → Deployment + ClusterIP (статическая SPA-посадочная страница, образ `gross-view.registry.twcstorage.ru/gross-view/gross-view-ui:latest`, pull через `imagePullSecrets` → Secret `gross-view-registry`), gross-view-api → Deployment + ClusterIP (бэкенд `gross-view-handler`, образ `gross-view.registry.twcstorage.ru/gross-view/gross-view-handler:latest`, ролл-аут после push — `rollout restart deployment/gross-view-api`, см. раздел «Push и ролл-аут образа gross-view-handler»), opencode → Deployment, certbot → CronJob (Let's Encrypt, HTTP-01/webroot, ежедневное обновление → Secret `mint-box-tls` + рестарт nginx). Тема и realm Keycloak встраиваются в ConfigMap через `configMapGenerator` в корневом `kustomization.yaml`. Требуются DNS-записи `mint-box.ru`/`www.mint-box.ru` на внешний IP ноды и доступный порт 80.
+Соответствие сервисов: postgres → StatefulSet, keycloak → Deployment, nginx → Deployment + LoadBalancer (80/443, TLS-терминация для mint-box.ru), gross-view-ui → Deployment + ClusterIP (статическая SPA-посадочная страница, образ `gross-view.registry.twcstorage.ru/gross-view/gross-view-ui:latest`, pull через `imagePullSecrets` → Secret `gross-view-registry`), gross-view-api → Deployment + ClusterIP (бэкенд `gross-view-handler`, образ `gross-view.registry.twcstorage.ru/gross-view/gross-view-handler:latest`, ролл-аут после push — `rollout restart deployment/gross-view-api`, см. раздел «Push и ролл-аут образа gross-view-handler»), mail → Deployment + hostPort 25/465/587/993 (Stalwart, почта в PostgreSQL, TLS из certbot; внутренний SMTP для Keycloak — `mail:2525`), opencode → Deployment, certbot → CronJob (Let's Encrypt, HTTP-01/webroot, ежедневное обновление → Secret `mint-box-tls`/`mail-tls` + рестарт nginx/mail). Тема и realm Keycloak встраиваются в ConfigMap через `configMapGenerator` в корневом `kustomization.yaml`. Требуются DNS-записи `mint-box.ru`/`www.mint-box.ru` на внешний IP ноды и доступный порт 80.
+
+## Почтовый сервис (Stalwart)
+
+В namespace `gross-view` работает Stalwart `v1.0.2` (`k8s/base/mail-*.yaml`). Он принимает почту для домена `mint-box.ru`, отдаёт IMAP/SMTP и используется Keycloak для писем подтверждения регистрации. Ящики: `gi.pavlov@mint-box.ru` (администратор, aliases `postmaster@`, `abuse@`, `dmarc@`) и `no.reply@mint-box.ru` (только для отправки уведомлений).
+
+Почтовые данные и тела писем хранятся в существующем PostgreSQL: база `stalwart`, пользователь `stalwart`. Отдельного PVC для почты нет; pod использует только `emptyDir` для кэшей. Пароль БД лежит в Vault (`secret/gross-view/stalwart_db_password`), пароли ящиков — в `secret/mail` → Secret `mail-secrets`. Бэкапы пока не настроены: потеря PVC `postgres-data-postgres-0` означает потерю почты (и Keycloak/БД).
+
+### DNS и PTR
+
+Обязательные записи:
+
+```text
+mx.mint-box.ru.              A      200.165.239.108
+mint-box.ru.                 MX 10  mx.mint-box.ru.
+mint-box.ru.                 TXT    "v=spf1 ip4:200.165.239.108 -all"
+_dmarc.mint-box.ru.          TXT    "v=DMARC1; p=none; rua=mailto:dmarc@mint-box.ru"
+mail._domainkey.mint-box.ru. TXT    "v=DKIM1; k=rsa; h=sha256; p=<RSA_PUBLIC_KEY>"
+```
+
+DKIM-ключ один — RSA с селектором `mail`. Управление DKIM переведено в ручной режим, автоматическая ротация отключена: иначе Stalwart периодически генерировал бы новые селекторы, а публиковать их в DNS пришлось бы вручную. Ed25519-подпись отключена, потому что часть приёмников (например, Port25) не поддерживает `ed25519-sha256` и показывает `permerror`; на доставляемость это не влияет, но чистая проверка лучше. Значения DKIM удобно смотреть в админке Stalwart (`Settings → Domains → mint-box.ru → Zone File`) или через `stalwart-cli get Domain <id>`.
+
+**Важно:** MX должен указывать на имя `mx.mint-box.ru`, а не на IP-адрес. MX с IP в качестве target невалиден. PTR настраивается не в DNS, а в панели Timeweb: «Сети → Публичные IP → 200.165.239.108 → PTR» → `mx.mint-box.ru`.
+
+### Порты и доступ
+
+- 25/tcp — входящая почта (MX);
+- 465/tcp — SMTPS;
+- 587/tcp — submission (STARTTLS, AUTH);
+- 993/tcp — IMAPS;
+- 2525/tcp — только внутри кластера (ClusterIP), cleartext SMTP для Keycloak; AUTH разрешён только на этом порту;
+- 8080/tcp — админка/health, только внутри кластера; снаружи доступна через VPN-шлюз на `10.2.2.3:18080` (см. ниже).
+
+Админка доступна двумя способами:
+
+```text
+# через VPN (тот же шлюз, что Vault):
+http://10.2.2.3:18080/admin
+
+# либо локально:
+kubectl -n gross-view port-forward svc/mail 18080:8080
+http://127.0.0.1:18080/admin
+```
+
+Логи Stalwart пишутся в файл внутри pod:
+
+```bash
+kubectl -n gross-view exec deploy/mail -- tail -f /var/log/stalwart/stalwart.log.$(date +%F)
+```
+
+### TLS
+
+Certbot CronJob выпускает отдельный сертификат для `mx.mint-box.ru` и обновляет Secret `mail-tls`; после обновления Secret почтовый Deployment перезапускается. Реальный сертификат Let's Encrypt уже выпущен 2026-11-04 и действует до 2027-02-02 (self-signed был только временным bootstrap-решением). При необходимости ручного выпуска/перевыпуска:
+
+```bash
+kubectl -n gross-view create job --from=cronjob/certbot certbot-mail-bootstrap
+kubectl -n gross-view logs -f job/certbot-mail-bootstrap
+```
+
+Проверка:
+
+```bash
+openssl s_client -connect 200.165.239.108:993 -servername mx.mint-box.ru -brief
+```
+
+### Keycloak SMTP
+
+Живой realm `gross-view-realm` настроен на `mx.mint-box.ru:587` со STARTTLS, отправитель `no.reply@mint-box.ru`, reply-to `gi.pavlov@mint-box.ru`. Пароль хранится в Vault (`secret/mail/noreply_password`), в `gross-view-realm.json` он не коммитится — после импорта realm на свежем кластере SMTP-пароль нужно задать вручную через admin console/`kcadm.sh`.
+
+Внутренний `mail.gross-view.svc.cluster.local:2525` (без TLS, AUTH разрешён только на этом порту) остаётся запасным вариантом на случай проблем с внешним DNS/сертификатом.
 
 ## Структура
 

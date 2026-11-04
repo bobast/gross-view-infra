@@ -1,0 +1,45 @@
+# Stalwart mail server - internal Service.
+#
+# External SMTP/IMAP access uses the node hostPorts (25/465/587/993), not the
+# LoadBalancer. This ClusterIP Service is for in-cluster consumers: Keycloak
+# uses port 587 for SMTP submission, and operators can port-forward 8080 for
+# the Stalwart admin UI.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mail
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: mail
+    app.kubernetes.io/part-of: gross-view
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: mail
+  ports:
+    - name: smtp
+      port: 25
+      targetPort: smtp
+      protocol: TCP
+    - name: submissions
+      port: 465
+      targetPort: submissions
+      protocol: TCP
+    - name: submission
+      port: 587
+      targetPort: submission
+      protocol: TCP
+    # Cluster-only cleartext submission used by Keycloak; not exposed on the
+    # node. AUTH is restricted to this port in Stalwart's MtaStageAuth.
+    - name: submission-int
+      port: 2525
+      targetPort: submission-int
+      protocol: TCP
+    - name: imaps
+      port: 993
+      targetPort: imaps
+      protocol: TCP
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP

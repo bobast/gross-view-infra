@@ -8,10 +8,10 @@
 #
 # NOTE (2026-10-07, restored 2026-10-08): the nginx stream proxy container (and
 # its ConfigMap `vpn-gateway-proxy`, listeners 10.2.2.3:15432 -> postgres /
-# :18200 -> vault) was removed on 2026-10-07 and restored verbatim from
-# docs/vpn-access-k8s.md §12. The proxy is the only thing that serves the two
-# developer-facing ports inside the tunnel; it shares the pod netns so it can
-# bind the wg0 address directly.
+# :18200 -> vault / :18080 -> Stalwart mail admin) was removed on 2026-10-07 and
+# restored from docs/vpn-access-k8s.md §12. The proxy is the only thing that
+# serves the developer-facing ports inside the tunnel; it shares the pod netns
+# so it can bind the wg0 address directly.
 #
 # Design constraints that shaped this manifest:
 #   * hostPort (not a Service): the Timeweb load balancer only speaks TCP
@@ -190,10 +190,11 @@ spec:
               # BusyBox loop. The node now has 8GB RAM (was 2GB), so the limit is
               # raised along with the rest of the stack.
               memory: 384Mi
-        # nginx stream proxy: publishes the two VPN-only ports on the wg0 address
-        # (postgres 15432, vault 18200). Both containers share the pod network
-        # namespace, but they start in parallel: wait for wg0 to carry 10.2.2.3,
-        # otherwise nginx fails to bind the stream listen address and exits.
+        # nginx stream proxy: publishes the VPN-only ports on the wg0 address
+        # (postgres 15432, vault 18200, Stalwart admin 18080). Both containers
+        # share the pod network namespace, but they start in parallel: wait for
+        # wg0 to carry 10.2.2.3, otherwise nginx fails to bind the stream listen
+        # address and exits.
         - name: proxy
           image: dockerhub.timeweb.cloud/library/nginx:stable-alpine
           command:

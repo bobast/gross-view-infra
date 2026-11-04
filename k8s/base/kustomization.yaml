@@ -24,6 +24,13 @@ resources:
   # sketches/descriptions/k8s_deploy_plan.md.
   - gross-view-api-deployment.yaml
   - gross-view-api-service.yaml
+  # Stalwart mail server: notifications for Keycloak/the app plus two small
+  # mailboxes. Mail data and blobs live in the existing PostgreSQL instance
+  # (database `stalwart`); the pod is stateless apart from emptyDir caches.
+  - mail-configmap.yaml
+  - mail-deployment.yaml
+  - mail-service.yaml
+  - mail-externalsecret.yaml
   - vault-sa.yaml
   # ServiceAccount identity the gross-view-handler workload (Deployment
   # `gross-view-api`) uses to log in to Vault (auth/kubernetes role

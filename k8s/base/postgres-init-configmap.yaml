@@ -26,4 +26,11 @@ data:
     psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$GV_DB_NAME" <<-EOSQL
         CREATE EXTENSION IF NOT EXISTS timescaledb;
     EOSQL
+  init-stalwart-db.sh: |
+    #!/bin/bash
+    set -e
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+        CREATE ROLE "${STALWART_DB_USER}" LOGIN PASSWORD '${STALWART_DB_PSWD}';
+        CREATE DATABASE "${STALWART_DB_NAME}" OWNER "${STALWART_DB_USER}";
+    EOSQL
 

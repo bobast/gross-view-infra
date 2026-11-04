@@ -1,0 +1,36 @@
+# Stalwart mail server - startup configuration.
+#
+# Stalwart 1.x keeps almost all of its configuration inside the data store.
+# The only thing that must exist on disk is config.json, which tells the
+# server where that data store is. Here the data store is the existing
+# PostgreSQL instance (database `stalwart`), and the blob store is left at
+# its default: "use data store", so message bodies and attachments live in
+# the same PostgreSQL database.
+#
+# The database password is NOT in this ConfigMap. `authSecret` uses the
+# EnvironmentVariable variant and reads STALWART_DB_PASSWORD, injected from
+# the `gross-view-secrets` Secret (Vault -> ESO).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mail-config
+  namespace: gross-view
+  labels:
+    app.kubernetes.io/name: mail
+    app.kubernetes.io/part-of: gross-view
+data:
+  config.json: |
+    {
+      "@type": "PostgreSql",
+      "host": "postgres.gross-view.svc.cluster.local",
+      "port": 5432,
+      "database": "stalwart",
+      "authUsername": "stalwart",
+      "authSecret": {
+        "@type": "EnvironmentVariable",
+        "variableName": "STALWART_DB_PASSWORD"
+      },
+      "useTls": false,
+      "connectTimeout": 15000,
+      "poolMaxConnections": 10
+    }

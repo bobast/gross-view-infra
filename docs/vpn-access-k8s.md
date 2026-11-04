@@ -10,7 +10,9 @@
 в git-истории его по-прежнему нет), строка в `kustomization.yaml`, `fsGroup: 101`
 и volume'ы возвращены в `k8s/base/vpn-gateway-deployment.yaml`. Порты
 `10.2.2.3:15432` (postgres) / `10.2.2.3:18200` (vault) снова слушаются
-внутри туннеля. §12 сохранён как историческая точка отсчёта (тексты, которые
+внутри туннеля. **2026-11-04 добавлен третий порт `10.2.2.3:18080` →
+админка Stalwart (`mail.gross-view.svc.cluster.local:8080`)**; открывается как
+`http://10.2.2.3:18080/admin` (корень `/` Stalwart редиректит на `/account`). §12 сохранён как историческая точка отсчёта (тексты, которые
 восстанавливались).
 
 **2026-10-09: подсеть туннеля изменена по запросу** — адрес wg0 `10.13.13.1/24`
@@ -28,13 +30,13 @@ gross-view-handler (docker-compose) и не тронуто — подсети д
 не совпадают.
 
 Задача: дать разработчику с ноутбука доступ к внутренним сервисам кластера
-(минимум — PostgreSQL и Vault), не публикуя их наружу и не открывая наружу весь
+(минимум — PostgreSQL, Vault и админка Stalwart), не публикуя их наружу и не открывая наружу весь
 сетевой диапазон кластера.
 
 Решение: под `vpn-gateway` в ns `gross-view`, в котором в одном pod-е живут
 WireGuard-сервер и nginx-stream-proxy. Клиент подключается по
-UDP к публичному IP узла, попадает в туннель `10.2.2.0/24` (адрес шлюза `10.2.2.3/24` с 2026-10-09) и видит ровно два
-порта: прокси на PostgreSQL и прокси на Vault.
+UDP к публичному IP узла, попадает в туннель `10.2.2.0/24` (адрес шлюза `10.2.2.3/24` с 2026-10-09) и видит ровно три
+порта: прокси на PostgreSQL, прокси на Vault и админку Stalwart.
 
 ---
 
@@ -80,11 +82,13 @@ UDP к публичному IP узла, попадает в туннель `10.
    │ wg0 10.2.2.3/24    (контейнер wireguard, NET_ADMIN)        │
    │   :15432 ──► postgres.gross-view.svc.cluster.local:5432      │
    │   :18200 ──► vault.gross-view.svc.cluster.local:8200         │
+   │   :18080 ──► mail.gross-view.svc.cluster.local:8080          │
    │              (контейнер proxy, nginx stream)                │
    └──────────────────────────────────────────────────────────────┘
         │  ClusterIP / pod IP, внутри кластера
         ▼
    postgres-0 (10.244.4.x:5432)          vault (10.96.200.70 → pod:8200)
+   mail (10.102.50.180 → pod:8080)
 ```
 
 > История: **2026-10-07** строки `:15432`/`:18200` (и контейнер `proxy`) из
@@ -96,7 +100,7 @@ UDP к публичному IP узла, попадает в туннель `10.
 
 | Решение | Почему |
 |---|---|
-| Только прокси-порты, без маршрутизации CIDR | У клиента в `AllowedIPs` стоит `10.2.2.3/32`. Даже если он захочет — в туннель физически нечего положить: ни pod IP, ни ClusterIP, ни `10.96.0.1:443` (API-сервер). Поверхность атаки = UDP-порт, закрытый криптографией WireGuard, и два TCP-порта (прокси-слой восстановлен 2026-10-08; в период 2026-10-07…10-08 их не было). |
+| Только прокси-порты, без маршрутизации CIDR | У клиента в `AllowedIPs` стоит `10.2.2.3/32`. Даже если он захочет — в туннель физически нечего положить: ни pod IP, ни ClusterIP, ни `10.96.0.1:443` (API-сервер). Поверхность атаки = UDP-порт, закрытый криптографией WireGuard, и три TCP-порта (прокси-слой восстановлен 2026-10-08; в период 2026-10-07…10-08 их не было). |
 | Оба компонента в одном pod-е | nginx должен слушать адрес `wg0`. Разные pod-ы = разные netns; либо `hostNetwork` у обоих, либо сетевой плагин вроде Multus. Общий netns — самое простое. |
 | `hostPort`, а не `Service` | LB Timeweb не умеет UDP (см. §1). |
 | `NET_ADMIN` без `privileged` и без `hostNetwork` | Подтверждено замером. Никаких правок в Calico и на узле. |
@@ -111,7 +115,7 @@ UDP к публичному IP узла, попадает в туннель `10.
 |---|---|
 | `k8s/base/vpn-gateway-deployment.yaml` | Deployment: init-контейнер `render-config` (рендер конфига из Secret) + контейнер `wireguard` (образ `linuxserver/wireguard`, `NET_ADMIN`, `hostPort 43210/udp`) + контейнер `proxy` (nginx stream, восстановлен 2026-10-08; был удалён 2026-10-07) |
 | `k8s/base/vpn-gateway-entrypoint-configmap.yaml` | Скрипт рендера `wg0.conf` из Secret (LF-пин в `.gitattributes`); запускается init-контейнером, сам туннель поднимает образ |
-| `k8s/base/vpn-gateway-proxy-configmap.yaml` | `nginx.conf` со stream-листенерами на `10.2.2.3` (с 2026-10-09; `15432` → postgres, `18200` → vault). Удалён 2026-10-07, **восстановлен 2026-10-08** из §12 (в git-истории его **нет** — первая версия файла не была закоммичена) |
+| `k8s/base/vpn-gateway-proxy-configmap.yaml` | `nginx.conf` со stream-листенерами на `10.2.2.3` (с 2026-10-09; `15432` → postgres, `18200` → vault, `18080` → Stalwart admin). Удалён 2026-10-07, **восстановлен 2026-10-08** из §12 (в git-истории его **нет** — первая версия файла не была закоммичена) |
 | `k8s/base/kustomization.yaml` | Ресурсы vpn-шлюза в сборке (с 2026-10-08 — три: deployment + entrypoint-configmap + proxy-configmap) |
 | `scripts/lib-wg-keys.sh` | Общая генерация ключей для обоих скриптов: backend `wg` или fallback на `openssl` (X25519) |
 | `scripts/vpn-init.sh` | Генерация серверных ключей → Secret `vpn-gateway-keys` |
@@ -286,8 +290,10 @@ kubectl -n gross-view exec deploy/vpn-gateway -c proxy -- \
   wget -qO- --timeout=5 http://10.2.2.3:18200/v1/sys/health     # vault: initialized/unsealed
 kubectl -n gross-view exec deploy/vpn-gateway -c proxy -- \
   sh -c 'nc -w 3 10.2.2.3 15432 </dev/null && echo postgres OK'   # 5432 через stream
+kubectl -n gross-view exec deploy/vpn-gateway -c proxy -- \
+  wget -qO- --timeout=5 http://10.2.2.3:18080/healthz/live       # Stalwart admin/health
 kubectl -n gross-view exec deploy/vpn-gateway -c proxy -- tail -5 /var/log/nginx/access.log
-# в access.log видно upstream: 10.244.x.x:5432 и 10.96.200.70:8200 — DNS-резолв сработал
+# в access.log видно upstream: 10.244.x.x:5432, 10.96.200.70:8200 и 10.244.x.x:8080 — DNS-резолв сработал
 ```
 
 ### Шаг 4. Проверка с ноутбука
@@ -300,7 +306,7 @@ sudo wg-quick down gross-view
 ```
 
 ⚠️ Проверки доступа к сервисам (`psql "host=10.2.2.3 port=15432 ..."`,
-`curl http://10.2.2.3:18200/v1/sys/health`, `vault login -method=userpass
+`curl http://10.2.2.3:18200/v1/sys/health`, `curl http://10.2.2.3:18080/admin`, `vault login -method=userpass
 username=vpn-dev`, `vault kv get/patch secret/gross-view`) **работают с
 2026-10-08** (прокси-слой восстановлен; в период 2026-10-07…10-08 прокси-портов
 внутри туннеля не было). Пароль для psql берётся из `gross-view-secrets`

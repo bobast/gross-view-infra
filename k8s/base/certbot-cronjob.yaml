@@ -1,8 +1,11 @@
 # certbot - CronJob.
-# Issues/renews the Let's Encrypt certificate for mint-box.ru via HTTP-01
-# (webroot in the shared `certbot-data` PVC), then writes the PEM files into
-# the `mint-box-tls` Secret and rolls the nginx Deployment so nginx picks up
-# the new cert. The deploy-hook only runs when a certificate actually changed.
+# Issues/renews two Let's Encrypt certificates via HTTP-01 (webroot in the
+# shared `certbot-data` PVC):
+#   * mint-box.ru       -> Secret `mint-box-tls` -> nginx Deployment
+#   * mx.mint-box.ru    -> Secret `mail-tls`     -> mail Deployment
+# Both deploy hooks only run when a certificate actually changed. The web
+# certificate keeps its existing lineage; the mail certificate uses a separate
+# lineage so renewing one never invokes the other's hook.
 #
 # Bootstrap: the nginx pod cannot start until `mint-box-tls` exists. Either run
 # this job once first:
@@ -56,14 +59,48 @@ spec:
                   /tools/kubectl -n gross-view patch deployment nginx -p \
                     '{"spec":{"template":{"metadata":{"annotations":{"certbot/mint-box.ru":"`date +%s`"}}}}}'
                   SH
-                  chmod +x /tools/apply-cert.sh
+                  cat > /tools/apply-mail-cert.sh <<'SH'
+                  #!/bin/sh
+                  set -eu
+                  CERT=/etc/letsencrypt/live/mx.mint-box.ru/fullchain.pem
+                  KEY=/etc/letsencrypt/live/mx.mint-box.ru/privkey.pem
+                  if [ ! -f "$CERT" ] || [ ! -f "$KEY" ]; then
+                    echo "mail certificate files are missing, skipping" >&2
+                    exit 0
+                  fi
+                  /tools/kubectl create secret tls mail-tls \
+                    --cert="$CERT" --key="$KEY" \
+                    -n gross-view --dry-run=client -o yaml \
+                    | /tools/kubectl apply -f -
+                  if /tools/kubectl -n gross-view get deployment mail >/dev/null 2>&1; then
+                    /tools/kubectl -n gross-view rollout restart deployment/mail \
+                      || echo "warning: could not restart deployment/mail" >&2
+                  fi
+                  SH
+                  chmod +x /tools/apply-cert.sh /tools/apply-mail-cert.sh
+
+                  # Web certificate (nginx), existing lineage.
                   if [ ! -d /etc/letsencrypt/live/mint-box.ru ]; then
                     certbot certonly --webroot -w /var/www/certbot \
-                      -d mint-box.ru \
+                      -d mint-box.ru --cert-name mint-box.ru \
                       --non-interactive --agree-tos --email admin@mint-box.ru \
                       --deploy-hook /tools/apply-cert.sh
                   else
-                    certbot renew --non-interactive --deploy-hook /tools/apply-cert.sh
+                    certbot renew --cert-name mint-box.ru --non-interactive \
+                      --deploy-hook /tools/apply-cert.sh
+                  fi
+
+                  # Mail certificate (Stalwart SMTP/IMAP TLS). Separate lineage
+                  # so a renewal of one certificate never invokes the other's
+                  # deploy hook.
+                  if [ ! -d /etc/letsencrypt/live/mx.mint-box.ru ]; then
+                    certbot certonly --webroot -w /var/www/certbot \
+                      -d mx.mint-box.ru --cert-name mx.mint-box.ru \
+                      --non-interactive --agree-tos --email admin@mint-box.ru \
+                      --deploy-hook /tools/apply-mail-cert.sh
+                  else
+                    certbot renew --cert-name mx.mint-box.ru --non-interactive \
+                      --deploy-hook /tools/apply-mail-cert.sh
                   fi
               volumeMounts:
                 - name: certbot-data
