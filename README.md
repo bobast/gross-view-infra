@@ -223,6 +223,10 @@ kubectl -n gross-view rollout restart deployment/vpn-gateway
 пересборки пода с восстановленным прокси-слоем. Полный план, обоснование и меры
 безопасности — [docs/vpn-access-k8s.md](docs/vpn-access-k8s.md).
 
+Перенос БД `gross_view` из кластера в локальный docker-compose (TimescaleDB,
+`pg_dump`/`pg_restore`, сверка данных) —
+[docs/gross-view-db-migration-k8s-to-docker.md](docs/gross-view-db-migration-k8s-to-docker.md).
+
 ### Реестр контейнеров Timeweb Cloud (Артефактори)
 
 Собственные образы gross-view живут в реестре контейнеров Timeweb Cloud — хост `gross-view.registry.twcstorage.ru`. Токен доступа выдается в панели Timeweb при создании реестра и показывается только один раз (начинается с `registry-`); при потере токен перевыпускается в разделе «API и Terraform». Если указанный при push репозиторий ещё не существует, реестр создаст его автоматически.
