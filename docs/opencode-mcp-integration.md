@@ -195,6 +195,12 @@ docker compose up -d          # поднять всю связку (opencode б�
 # gross-view-<ws>-<userHash>-<sessionHash> на агенте (POST /mcp).
 ```
 
+> **С 2026-11-12 локальный `/sso` редиректит на production Keycloak**
+> (`https://mint-box.ru/sso`, см. README «Аутентификация (SSO) на локальном
+> стенде»), поэтому handler в debug-профиле должен иметь
+> `KEYCLOAK_URL=https://mint-box.ru/sso` — иначе его `issuer-uri` не совпадёт
+> с `iss` production-токена и запросы к `/api`/`/api/mcp` вернут 401.
+
 ### 4.2 Обязательные переменные `.env`
 
 ```

@@ -84,8 +84,10 @@ services:
     # its own as soon as scripts/generate-self-signed-cert.sh has written the
     # certificate + key.
     restart: always
-    depends_on:
-      - keycloak
+    # No depends_on keycloak: nginx no longer proxies /sso to the local
+    # container — it redirects to the production Keycloak
+    # (https://mint-box.ru/sso). The local keycloak service is kept for
+    # realm/theme work and can be started independently.
     networks:
       keycloak_network:
         ipv4_address: 172.28.0.4

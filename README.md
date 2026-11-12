@@ -13,6 +13,38 @@ sudo ./scripts/install-cert-system-trust.sh       # доверие к нему �
 docker-compose up -d
 ```
 
+### Аутентификация (SSO) на локальном стенде
+
+Локальный стенд использует **production Keycloak** `https://mint-box.ru/sso`
+(realm `gross-view-realm`): nginx отвечает на `https://gross-view.local/sso/*`
+редиректом `307` на тот же путь `https://mint-box.ru/sso/*`. Вход, регистрация,
+сброс пароля и тема страницы логина приходят из production.
+
+- Java-handler в режиме отладки должен смотреть на тот же issuer. В
+  `../gross-view-handler/debug.env` (файл не коммитится) задайте
+  `KEYCLOAK_URL='https://mint-box.ru/sso'` — иначе после успешного входа API
+  отвечает `401`, потому что issuer/JWKS локального и production Keycloak не
+  совпадают.
+- Публичный клиент `gross-view-handler` в realm уже разрешает redirect URI
+  `https://gross-view.local/*` и `http://localhost:5173/*`, поэтому Keycloak
+  возвращает браузер на локальный стенд.
+- Контейнер `keycloak` остаётся в compose как локальная песочница для
+  realm/темы (его hostname всё ещё `gross-view.local`); в пути аутентификации
+  сайта он больше не участвует, и `nginx` от него не зависит.
+- Нужен сетевой доступ с хоста и из браузера до `mint-box.ru`. Для полностью
+  автономного стенда верните в `nginx/gross-view.local.conf` proxy-блок на
+  `keycloak:8080` (см. историю git) и `KEYCLOAK_URL=https://gross-view.local/sso`.
+
+После изменения конфига nginx пересоздаётся и проверяется так:
+
+```bash
+docker compose up -d nginx
+curl -skI https://gross-view.local/sso/realms/gross-view-realm/.well-known/openid-configuration \
+  | grep -iE '^(HTTP|location)'
+# HTTP/... 307
+# Location: https://mint-box.ru/sso/realms/gross-view-realm/.well-known/openid-configuration
+```
+
 ### Запись в `/etc/hosts` (обязательно)
 
 nginx публикует порты 80/443 на хост, поэтому ОС должна резолвить домен в loopback.
@@ -97,8 +129,8 @@ TLS-хендшейк с `https://gross-view.local:443`). После каждог
 | Сервис     | IP (внутрен.) | Порты (внешн.) | Описание                                  |
 |------------|---------------|----------------|-------------------------------------------|
 | postgres   | 172.28.0.2    | 5432           | Основная БД (TimescaleDB)                 |
-| keycloak   | 172.28.0.3    | 8080           | SSO / Identity Provider                   |
-| nginx      | 172.28.0.4    | 80, 443        | Reverse proxy (входная точка /sso, /api, /)|
+| keycloak   | 172.28.0.3    | 8080           | Локальный Keycloak (realm/тема; /sso идёт в mint-box.ru) |
+| nginx      | 172.28.0.4    | 80, 443        | Reverse proxy (/sso → mint-box.ru, /api, /)|
 | opencode   | 172.28.0.5    | 4096           | AI coding agent (web UI)                  |
 
 > Vault в docker-compose **удалён (2026-10-19)** — он работает только в Kubernetes
